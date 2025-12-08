@@ -1,0 +1,148 @@
+bantu saya untuk mengimplementasikan websocket pada component CustomerService beserta sub componentnya untuk prosess realtime chatting dengan backend
+gunakan documentation pada context untuk proses integrasi
+
+NOTES:
+1. implementasikan dengan best practice
+2. check secara keseluruhan documentatasi frontend pada context
+3. sesuaikan data dan state yang ada dengan component yang akan digunakan tanpa merubah proses yang sekarang berjalan
+
+WARNING:
+1. jangan rubah struktur component dan data yang ada sekarang cukup implementasi tambahan untuk koneksi websocket suapay chat realtime
+2. analisa terlebih dahulu struktur code untuk menentukan design pttern dan posisi component yang akan digunakan
+3. hanya implementasi websocket pada component CustomerService dan sub componentnya tapi pertimbangkan jika ada yang harus di listen terus menerus seperti untuk menerima notifikasi
+
+
+Context Frontend Integration
+1. Connect to WebSocket
+// Connect to WebSocket
+const organizationId = "your-org-uuid";
+const jwtToken = "your-jwt-token";
+
+const ws = new WebSocket(
+    `ws://localhost:8000/ws/${organizationId}?token=${jwtToken}`
+);
+
+// Connection opened
+ws.onopen = () => {
+    console.log("✅ WebSocket connected");
+};
+
+// Connection closed
+ws.onclose = () => {
+    console.log("🔌 WebSocket disconnected");
+    // Implement reconnection logic
+    setTimeout(() => reconnect(), 5000);
+};
+
+// Connection error
+ws.onerror = (error) => {
+    console.error("❌ WebSocket error:", error);
+};
+2. Handle Incoming Messages
+ws.onmessage = (event) => {
+    const notification = JSON.parse(event.data);
+
+    switch (notification.type) {
+        case "connection_established":
+            console.log("✅ Connection established:", notification);
+            break;
+
+        case "new_message":
+            handleNewMessage(notification.data);
+            break;
+
+        case "chat_update":
+            handleChatUpdate(notification.data);
+            break;
+
+        default:
+            console.log("📩 Unknown notification type:", notification);
+    }
+};
+3. Handle New Message Notification
+function handleNewMessage(data) {
+    /*
+    data = {
+        chat_id: "chat-uuid",
+        message_id: "msg-uuid",
+        customer_id: "customer-uuid",
+        customer_name: "John Doe",
+        message_content: "Hello, I need help",
+        channel: "whatsapp",
+        handled_by: "ai",
+        is_new_chat: false,
+        was_reopened: false
+    }
+    */
+
+    // Update chat list (move to top, update last message)
+    updateChatInList(data.chat_id, {
+        lastMessage: data.message_content,
+        lastMessageAt: new Date().toISOString(),
+        customerName: data.customer_name
+    });
+
+    // If this chat is currently open, append message to conversation
+    if (isCurrentChatOpen(data.chat_id)) {
+        appendMessageToConversation({
+            id: data.message_id,
+            content: data.message_content,
+            senderName: data.customer_name,
+            senderType: "customer",
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    // Show notification badge
+    showNotificationBadge(data.chat_id, data.customer_name);
+
+    // Play notification sound
+    playNotificationSound();
+}
+4. Handle Chat Update Notification
+function handleChatUpdate(data) {
+    /*
+    data = {
+        chat_id: "chat-uuid",
+        // ... update-specific fields
+    }
+    */
+
+    // Refresh chat details in UI
+    refreshChatDetails(data.chat_id);
+}
+Message Format
+1. New Message Notification
+{
+    "type": "new_message",
+    "timestamp": "2025-10-29T10:30:00Z",
+    "data": {
+        "chat_id": "550e8400-e29b-41d4-a716-446655440000",
+        "message_id": "750e8400-e29b-41d4-a716-446655440001",
+        "customer_id": "850e8400-e29b-41d4-a716-446655440002",
+        "customer_name": "John Doe",
+        "message_content": "Hello, I need help with my order",
+        "channel": "whatsapp",
+        "handled_by": "ai",
+        "is_new_chat": false,
+        "was_reopened": false
+    }
+}
+2. Chat Update Notification
+{
+    "type": "chat_update",
+    "timestamp": "2025-10-29T10:35:00Z",
+    "update_type": "escalated",
+    "data": {
+        "chat_id": "550e8400-e29b-41d4-a716-446655440000",
+        "from_agent": "ai-agent-uuid",
+        "to_agent": "human-agent-uuid",
+        "reason": "Customer requested human agent"
+    }
+}
+3. Connection Established
+{
+    "type": "connection_established",
+    "message": "Connected to organization org-uuid",
+    "connection_count": 3
+}
