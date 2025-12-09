@@ -48,20 +48,107 @@ createRoot(document.getElementById("root")!).render(
                   <HashRouter>
                     <GlobalChatNotifications />
                     <Routes>
-                      <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-                      <Route path="/folder/:folderId" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+                      <Route
+                        path="/"
+                        element={
+                          <ProtectedRoute>
+                            <Index />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/folder/:folderId"
+                        element={
+                          <ProtectedRoute>
+                            <Index />
+                          </ProtectedRoute>
+                        }
+                      />
                       <Route path="/auth" element={<AuthPage />} />
-                      <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-                      <Route path="/crm" element={<ProtectedRoute><CRM /></ProtectedRoute>} />
-                      <Route path="/learning-center" element={<ProtectedRoute><LearningCenter /></ProtectedRoute>} />
-                      <Route path="/usage-billing" element={<ProtectedRoute><UsageBilling /></ProtectedRoute>} />
-                      <Route path="/organization" element={<ProtectedRoute><OrganizationSettings /></ProtectedRoute>} />
-                      <Route path="/user-management" element={<AdminRoute><UserManagement /></AdminRoute>} />
-                      <Route path="/groups" element={<AdminRoute><GroupManagement /></AdminRoute>} />
-                      <Route path="/groups/:groupId" element={<AdminRoute><GroupDetail /></AdminRoute>} />
-                      <Route path="/accept-invitation" element={<AcceptInvitation />} />
-                      <Route path="/coming-soon" element={<ProtectedRoute><ComingSoon /></ProtectedRoute>} />
-                      <Route path="*" element={<ProtectedRoute><NotFound /></ProtectedRoute>} />
+                      <Route
+                        path="/dashboard"
+                        element={
+                          <ProtectedRoute>
+                            <Dashboard />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/crm"
+                        element={
+                          <ProtectedRoute>
+                            <CRM />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/learning-center"
+                        element={
+                          <ProtectedRoute>
+                            <LearningCenter />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/usage-billing"
+                        element={
+                          <ProtectedRoute>
+                            <UsageBilling />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/organization"
+                        element={
+                          <ProtectedRoute>
+                            <OrganizationSettings />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="/user-management"
+                        element={
+                          <AdminRoute>
+                            <UserManagement />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route
+                        path="/groups"
+                        element={
+                          <AdminRoute>
+                            <GroupManagement />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route
+                        path="/groups/:groupId"
+                        element={
+                          <AdminRoute>
+                            <GroupDetail />
+                          </AdminRoute>
+                        }
+                      />
+                      <Route
+                        path="/accept-invitation"
+                        element={<AcceptInvitation />}
+                      />
+                      <Route
+                        path="/coming-soon"
+                        element={
+                          <ProtectedRoute>
+                            <ComingSoon />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route
+                        path="*"
+                        element={
+                          <ProtectedRoute>
+                            <NotFound />
+                          </ProtectedRoute>
+                        }
+                      />
                     </Routes>
                     <Toaster />
                   </HashRouter>
@@ -73,7 +160,7 @@ createRoot(document.getElementById("root")!).render(
       </ThemeProvider>
       <ReactQueryDevtools
         initialIsOpen={false}
-        position="bottom-right"
+        position="bottom"
         buttonPosition="bottom-right"
       />
     </QueryClientProvider>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,16 +8,15 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useOrganization } from "@/contexts/OrganizationContext";
 import { toast } from "sonner";
 import { Loader2, Check, X } from "lucide-react";
 import { BusinessSetup } from "@/components/BusinessSetup";
-import { apiClient } from "@/lib/apiClient";
 import { useTheme } from "next-themes";
 
 export const AuthPage = () => {
@@ -27,144 +26,68 @@ export const AuthPage = () => {
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
   const [showBusinessSetup, setShowBusinessSetup] = useState(false);
-  const [checkingOrganization, setCheckingOrganization] = useState(false);
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const { theme } = useTheme();
-
-  // Tab control state
   const [activeTab, setActiveTab] = useState<string>("signin");
 
-  // Password validation states
-  const [passwordRequirements, setPasswordRequirements] = useState({
-    minLength: false,
-    hasLowercase: false,
-    hasUppercase: false,
-    hasDigit: false,
-    hasSymbol: false,
-  });
+  const { user, loading: authLoading } = useAuth();
+  const { currentOrganization, loading: orgLoading } = useOrganization();
+  const navigate = useNavigate();
+  const { theme } = useTheme();
 
-  // Full name validation state
-  const [fullNameValid, setFullNameValid] = useState(true);
+  // ✅ OPTIMIZATION 1: Derived State (Calculated instantly, no Re-renders)
+  // This replaces the useEffects that were causing lag
+  const fullNameValid =
+    !fullName || /^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(fullName);
 
-  // Validate full name (only letters and spaces)
+  const passwordRequirements = {
+    minLength: password.length >= 8,
+    hasLowercase: /[a-z]/.test(password),
+    hasUppercase: /[A-Z]/.test(password),
+    hasDigit: /[0-9]/.test(password),
+    hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
+  };
+
+  // ✅ Handle URL Cleanup
   useEffect(() => {
-    if (fullName) {
-      // Only allow letters (including Unicode letters for international names) and spaces
-      const isValid = /^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(fullName);
-      setFullNameValid(isValid);
+    const { hash, search } = window.location;
+    if (
+      hash.includes("access_token") ||
+      hash.includes("type=") ||
+      search.includes("code=")
+    ) {
+      console.log("Cleaning up auth callback params");
+      const newUrl =
+        window.location.href.split("?")[0].split("#")[0] + "#/auth";
+      window.history.replaceState(null, "", newUrl);
+    }
+  }, []);
+
+  // ✅ Handle Navigation / Setup Decision
+  useEffect(() => {
+    if (authLoading || orgLoading) return;
+    if (!user) return;
+
+    if (currentOrganization) {
+      console.log("User has organization, redirecting home");
+      navigate("/", { replace: true });
     } else {
-      setFullNameValid(true); // Empty is valid (will be caught by required)
+      console.log("User needs organization setup");
+      setShowBusinessSetup(true);
     }
-  }, [fullName]);
-
-  // Validate password requirements
-  useEffect(() => {
-    if (password) {
-      setPasswordRequirements({
-        minLength: password.length >= 8,
-        hasLowercase: /[a-z]/.test(password),
-        hasUppercase: /[A-Z]/.test(password),
-        hasDigit: /[0-9]/.test(password),
-        hasSymbol: /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password),
-      });
-    } else {
-      setPasswordRequirements({
-        minLength: false,
-        hasLowercase: false,
-        hasUppercase: false,
-        hasDigit: false,
-        hasSymbol: false,
-      });
-    }
-  }, [password]);
-
-  // Check if user needs to complete business setup
-  useEffect(() => {
-    const checkUserOrganization = async () => {
-      if (!user) return;
-
-      console.log("Checking organization for user:", user.id);
-      setCheckingOrganization(true);
-
-      // Clean up URL hash params from email confirmation or OAuth
-      const currentHash = window.location.hash;
-      if (
-        currentHash.includes("access_token") ||
-        currentHash.includes("type=")
-      ) {
-        console.log("Cleaning up auth callback params from URL");
-        // Remove query params but keep the route
-        const cleanHash = currentHash.split("?")[0].split("#")[1] || "/auth";
-        window.history.replaceState(null, "", `#${cleanHash}`);
-      }
-
-      // Add small delay to ensure auth state is fully updated
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
-      try {
-        // Check organization status using the new endpoint
-        const response = await apiClient.get<{
-          has_organization: boolean;
-          has_parent: boolean;
-          needs_organization: boolean;
-          organization: any | null;
-          message: string;
-        }>("/organizations/check-status");
-
-        console.log("Organization status:", response);
-
-        if (response.needs_organization) {
-          // User needs to create organization
-          console.log("User needs to create organization");
-          setShowBusinessSetup(true);
-        } else {
-          // User has organization or has parent, redirect to home
-          console.log("User has organization, redirecting to home");
-          navigate("/", { replace: true });
-        }
-      } catch (error: any) {
-        console.error("Error checking organization status:", error);
-        // If endpoint fails, assume need business setup for new users
-        const createdAt = user.created_at
-          ? new Date(user.created_at)
-          : new Date();
-        const isNewUser = Date.now() - createdAt.getTime() < 60000; // Within last minute
-
-        if (isNewUser) {
-          console.log("New user detected, showing business setup");
-          setShowBusinessSetup(true);
-        } else {
-          console.log("Existing user, redirecting to home");
-          navigate("/", { replace: true });
-        }
-      } finally {
-        setCheckingOrganization(false);
-      }
-    };
-
-    if (user) {
-      checkUserOrganization();
-    }
-  }, [user, navigate]);
+  }, [user, currentOrganization, authLoading, orgLoading, navigate]);
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate full name - only letters and spaces allowed
     if (!fullNameValid) {
       toast.error("Nama lengkap hanya boleh berisi huruf dan spasi");
       return;
     }
 
-    // Validate password confirmation
     if (password !== confirmPassword) {
       toast.error("Password dan konfirmasi password tidak cocok");
       return;
     }
 
-    // Validate all password requirements
     const allRequirementsMet = Object.values(passwordRequirements).every(
       (req) => req
     );
@@ -181,64 +104,35 @@ export const AuthPage = () => {
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/#/auth`,
-          data: {
-            full_name: fullName,
-          },
+          data: { full_name: fullName },
         },
       });
 
       if (error) throw error;
 
-      // Check if user already exists (duplicate email)
-      // When email already exists, Supabase returns user with empty identities array
       if (
         data.user &&
         data.user.identities &&
         data.user.identities.length === 0
       ) {
-        // This means the email is already registered
         toast.error(
           "Email sudah digunakan. Silakan gunakan email lain atau masuk dengan akun yang sudah ada."
         );
         return;
       }
 
-      // Successful registration
-      if (data.user) {
-        // New user successfully registered
-        toast.success(
-          "Pendaftaran berhasil! Silakan periksa email Anda untuk konfirmasi."
-        );
+      toast.success(
+        "Pendaftaran berhasil! Silakan periksa email Anda untuk konfirmasi."
+      );
 
-        // Clear form fields
-        setFullName("");
-        setEmail("");
-        setPassword("");
-        setConfirmPassword("");
+      setFullName("");
+      setEmail("");
+      setPassword("");
+      setConfirmPassword("");
 
-        // Switch to signin tab after 2 seconds
-        setTimeout(() => {
-          setActiveTab("signin");
-        }, 2000);
-      } else {
-        // Fallback case - should not normally reach here
-        toast.success(
-          "Pendaftaran berhasil! Silakan periksa email Anda untuk konfirmasi."
-        );
-
-        // Clear form fields
-        setFullName("");
-        setEmail("");
-        setPassword("");
-        setConfirmPassword("");
-
-        // Switch to signin tab after 2 seconds
-        setTimeout(() => {
-          setActiveTab("signin");
-        }, 2000);
-      }
+      // ✅ FIX: Removed setTimeout. Instantly switches to Sign In tab.
+      setActiveTab("signin");
     } catch (error: any) {
-      // Handle specific error messages from Supabase
       if (
         error.message?.includes("already registered") ||
         error.message?.includes("User already registered")
@@ -257,17 +151,13 @@ export const AuthPage = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
       if (error) throw error;
-
       toast.success("Successfully signed in!");
-      // useEffect will handle navigation after checking organization
     } catch (error: any) {
       toast.error(error.message || "Failed to sign in");
     } finally {
@@ -282,13 +172,9 @@ export const AuthPage = () => {
         provider: "google",
         options: {
           redirectTo: window.location.origin,
-          queryParams: {
-            access_type: "offline",
-            prompt: "consent",
-          },
+          queryParams: { access_type: "offline", prompt: "consent" },
         },
       });
-
       if (error) throw error;
     } catch (error: any) {
       toast.error(error.message || "Failed to sign in with Google");
@@ -296,30 +182,14 @@ export const AuthPage = () => {
     }
   };
 
-  const handleBusinessSetupComplete = () => {
-    setShowBusinessSetup(false);
+  const handleBusinessSetupComplete = async () => {
     toast.success("Welcome! Your business has been set up successfully.");
-    navigate("/");
+    setShowBusinessSetup(false);
   };
 
-  // If user is logged in and we're checking organization, show loading
-  if (
-    user &&
-    (checkingOrganization || (!showBusinessSetup && !checkingOrganization))
-  ) {
-    // If not checking and not showing business setup, it means we're about to redirect
-    // Show loading to avoid flicker
-    if (!checkingOrganization && !showBusinessSetup) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center">
-          <div className="text-center space-y-4">
-            <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary" />
-            <p className="text-sm text-muted-foreground">Mengarahkan...</p>
-          </div>
-        </div>
-      );
-    }
+  // ✅ RENDER LOGIC
 
+  if (authLoading || (user && orgLoading)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center">
         <div className="text-center space-y-4">
@@ -332,7 +202,6 @@ export const AuthPage = () => {
     );
   }
 
-  // Show business setup if needed
   if (user && showBusinessSetup) {
     return (
       <BusinessSetup
@@ -342,7 +211,6 @@ export const AuthPage = () => {
     );
   }
 
-  // Show auth forms only if no user
   if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-background via-muted/30 to-background flex items-center justify-center p-4">
@@ -381,6 +249,7 @@ export const AuthPage = () => {
                 <TabsTrigger value="signup">Daftar</TabsTrigger>
               </TabsList>
 
+              {/* SIGN IN TAB */}
               <TabsContent value="signin" className="mt-6 space-y-4">
                 <form onSubmit={handleSignIn} className="space-y-5">
                   <div className="space-y-2">
@@ -472,6 +341,7 @@ export const AuthPage = () => {
                 </Button>
               </TabsContent>
 
+              {/* SIGN UP TAB */}
               <TabsContent value="signup" className="mt-6 space-y-4">
                 <form onSubmit={handleSignUp} className="space-y-5">
                   <div className="space-y-2">
@@ -654,17 +524,6 @@ export const AuthPage = () => {
                           Password cocok
                         </p>
                       )}
-                    {confirmPassword &&
-                      password === confirmPassword &&
-                      !Object.values(passwordRequirements).every(
-                        (req) => req
-                      ) && (
-                        <p className="text-xs text-amber-600 dark:text-amber-500 flex items-center gap-1 mt-1">
-                          <X className="w-3 h-3" />
-                          Password cocok, tapi belum memenuhi persyaratan
-                          keamanan
-                        </p>
-                      )}
                   </div>
 
                   <Button
@@ -723,7 +582,7 @@ export const AuthPage = () => {
                       />
                     </svg>
                   )}
-                  Daftar dengan Google
+                  Masuk dengan Google
                 </Button>
 
                 <p className="text-xs text-center text-muted-foreground">
@@ -736,7 +595,5 @@ export const AuthPage = () => {
       </div>
     );
   }
-
-  // Fallback - should not reach here
   return null;
 };

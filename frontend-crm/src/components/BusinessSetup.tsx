@@ -1,60 +1,90 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { toast } from 'sonner';
-import { apiClient } from '@/lib/apiClient';
-import { Building2, Loader2 } from 'lucide-react';
-import { useTheme } from 'next-themes';
+} from "@/components/ui/select";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { toast } from "sonner";
+import { apiClient } from "@/lib/apiClient";
+import { useOrganization } from "@/contexts/OrganizationContext";
+import { Loader2 } from "lucide-react";
+import { useTheme } from "next-themes";
 
 interface BusinessSetupProps {
   onComplete: () => void;
   userId: string;
 }
 
+const STORAGE_KEY = "syntra_business_setup_draft";
+
 export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
   const [loading, setLoading] = useState(false);
   const { theme } = useTheme();
-  const [formData, setFormData] = useState({
-    name: '',
-    legalName: '',
-    category: '',
-    description: '',
+
+  // ✅ 1. Import Context to fix the "Loop"
+  const { refreshOrganization, currentOrganization } = useOrganization();
+
+  // ✅ 2. Initialize from LocalStorage (Fixes "Form Auto Clear")
+  const [formData, setFormData] = useState(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved
+        ? JSON.parse(saved)
+        : { name: "", legalName: "", category: "", description: "" };
+    } catch {
+      return { name: "", legalName: "", category: "", description: "" };
+    }
   });
 
+  // ✅ 3. Auto-save to LocalStorage
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+  }, [formData]);
+
+  // ✅ 4. Auto-redirect if organization appears (Fixes Race Conditions)
+  useEffect(() => {
+    if (currentOrganization) {
+      onComplete();
+    }
+  }, [currentOrganization]);
+
   const businessCategories = [
-    { value: 'technology', label: 'Technology' },
-    { value: 'finance', label: 'Finance' },
-    { value: 'healthcare', label: 'Healthcare' },
-    { value: 'education', label: 'Education' },
-    { value: 'retail', label: 'Retail' },
-    { value: 'manufacturing', label: 'Manufacturing' },
-    { value: 'consulting', label: 'Consulting' },
-    { value: 'real_estate', label: 'Real Estate' },
-    { value: 'hospitality', label: 'Hospitality' },
-    { value: 'transportation', label: 'Transportation' },
-    { value: 'media', label: 'Media' },
-    { value: 'agriculture', label: 'Agriculture' },
-    { value: 'construction', label: 'Construction' },
-    { value: 'energy', label: 'Energy' },
-    { value: 'telecommunications', label: 'Telecommunications' },
-    { value: 'other', label: 'Other' },
+    { value: "technology", label: "Technology" },
+    { value: "finance", label: "Finance" },
+    { value: "healthcare", label: "Healthcare" },
+    { value: "education", label: "Education" },
+    { value: "retail", label: "Retail" },
+    { value: "manufacturing", label: "Manufacturing" },
+    { value: "consulting", label: "Consulting" },
+    { value: "real_estate", label: "Real Estate" },
+    { value: "hospitality", label: "Hospitality" },
+    { value: "transportation", label: "Transportation" },
+    { value: "media", label: "Media" },
+    { value: "agriculture", label: "Agriculture" },
+    { value: "construction", label: "Construction" },
+    { value: "energy", label: "Energy" },
+    { value: "telecommunications", label: "Telecommunications" },
+    { value: "other", label: "Other" },
   ];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!formData.name || !formData.category) {
-      toast.error('Please fill in all required fields');
+      toast.error("Please fill in all required fields");
       return;
     }
 
@@ -62,7 +92,7 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
 
     try {
       // Call API to create organization
-      const response = await apiClient.post<{ organization_id: string }>('/organizations', {
+      await apiClient.post<{ organization_id: string }>("/organizations", {
         name: formData.name,
         legal_name: formData.legalName || null,
         category: formData.category,
@@ -70,11 +100,55 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
         owner_id: userId,
       });
 
-      toast.success('Business information saved successfully!');
+      // Clear draft upon success
+      localStorage.removeItem(STORAGE_KEY);
+      toast.success("Business information saved successfully!");
+
+      // ✅ 5. Force refresh context to enter Dashboard
+      await refreshOrganization();
       onComplete();
     } catch (error: any) {
-      console.error('Error creating organization:', error);
-      toast.error(error.message || 'Failed to save business information');
+      console.error("Error creating organization:", error);
+
+      if (
+        error.message?.includes("organizations_owner_id_fkey") ||
+        error.code === "23503"
+      ) {
+        toast.error(
+          "Session sync error. Your account may have been deleted. Logging out..."
+        );
+
+        // 🧨 NUCLEAR OPTION: Destroy all evidence
+        // Remove the specific Supabase token (replace with your actual project key if different)
+        localStorage.removeItem("sb-ogiagiflmsjvuhknmihh-auth-token");
+
+        // Remove the form draft so they don't reload with the same bad data
+        localStorage.removeItem(STORAGE_KEY);
+
+        // Optional: Clear everything else to be safe
+        // localStorage.clear();
+
+        // Redirect immediately to Register to recreate the account
+        setTimeout(() => {
+          window.location.href = "/register";
+        }, 1500);
+
+        return;
+      }
+
+      // ✅ 6. INTELLIGENT RECOVERY: If org already exists, sync state!
+      if (
+        error.message?.includes("already has an organization") ||
+        error.message?.includes("unique constraint") ||
+        error.message?.includes("already exists")
+      ) {
+        toast.info("It seems you already have an organization. Syncing...");
+        await refreshOrganization();
+        // The useEffect above will detect the new org and trigger onComplete()
+        return;
+      }
+
+      toast.error(error.message || "Failed to save business information");
     } finally {
       setLoading(false);
     }
@@ -87,9 +161,10 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
           <div className="flex flex-col items-center justify-center gap-4">
             <div className="w-full max-w-[180px] h-16 flex items-center justify-center">
               <img
-                src={theme === 'dark'
-                  ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-dark-2.png"
-                  : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-light.png"
+                src={
+                  theme === "dark"
+                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-dark-2.png"
+                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-light.png"
                 }
                 alt="Syntra Logo"
                 className="h-full w-auto object-contain"
@@ -101,7 +176,9 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
             <CardDescription className="text-base">
               Tell us about your business to complete the registration
             </CardDescription>
-            <p className="text-xs text-muted-foreground italic">powered by SINERGI</p>
+            <p className="text-xs text-muted-foreground italic">
+              powered by SINERGI
+            </p>
           </div>
         </CardHeader>
         <CardContent>
@@ -116,7 +193,9 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
                 type="text"
                 placeholder="e.g., Acme Corporation"
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, name: e.target.value })
+                }
                 className="h-10"
                 required
               />
@@ -125,14 +204,19 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
             {/* Legal Business Name - Optional */}
             <div className="space-y-2">
               <Label htmlFor="legalName" className="text-sm font-medium">
-                Legal Business Name <span className="text-muted-foreground text-xs">(Optional)</span>
+                Legal Business Name{" "}
+                <span className="text-muted-foreground text-xs">
+                  (Optional)
+                </span>
               </Label>
               <Input
                 id="legalName"
                 type="text"
                 placeholder="e.g., Acme Corporation Ltd."
                 value={formData.legalName}
-                onChange={(e) => setFormData({ ...formData, legalName: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, legalName: e.target.value })
+                }
                 className="h-10"
               />
               <p className="text-xs text-muted-foreground">
@@ -147,7 +231,9 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
               </Label>
               <Select
                 value={formData.category}
-                onValueChange={(value) => setFormData({ ...formData, category: value })}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, category: value })
+                }
                 required
               >
                 <SelectTrigger className="h-10">
@@ -166,13 +252,18 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
             {/* Business Description - Optional */}
             <div className="space-y-2">
               <Label htmlFor="description" className="text-sm font-medium">
-                Short Description <span className="text-muted-foreground text-xs">(Optional)</span>
+                Short Description{" "}
+                <span className="text-muted-foreground text-xs">
+                  (Optional)
+                </span>
               </Label>
               <Textarea
                 id="description"
                 placeholder="Brief description of your business..."
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) =>
+                  setFormData({ ...formData, description: e.target.value })
+                }
                 className="min-h-[100px] resize-none"
                 maxLength={500}
               />
@@ -193,7 +284,7 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
                     Saving...
                   </>
                 ) : (
-                  'Complete Setup'
+                  "Complete Setup"
                 )}
               </Button>
               <p className="text-xs text-center text-muted-foreground">

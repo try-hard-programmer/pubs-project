@@ -1,10 +1,16 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
 import {
   OrganizationRolesService,
   UserOrganizationRole,
   OrganizationRole,
-} from '@/lib/organizationRolesService';
-import { useAuth } from './AuthContext';
+} from "@/lib/organizationRolesService";
+import { useAuth } from "./AuthContext";
 
 interface RoleContextType {
   userRoles: UserOrganizationRole[];
@@ -27,7 +33,9 @@ interface RoleProviderProps {
 
 export const RoleProvider = ({ children }: RoleProviderProps) => {
   const [userRoles, setUserRoles] = useState<UserOrganizationRole[]>([]);
-  const [currentOrgRole, setCurrentOrgRole] = useState<OrganizationRole | null>(null);
+  const [currentOrgRole, setCurrentOrgRole] = useState<OrganizationRole | null>(
+    null
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
@@ -51,8 +59,8 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
         setCurrentOrgRole(response.organizations[0].role);
       }
     } catch (err: any) {
-      console.error('Error fetching user roles:', err);
-      setError(err.message || 'Failed to fetch user roles');
+      console.error("Error fetching user roles:", err);
+      setError(err.message || "Failed to fetch user roles");
       setUserRoles([]);
     } finally {
       setLoading(false);
@@ -60,12 +68,20 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
   };
 
   useEffect(() => {
-    fetchUserRoles();
-  }, [user]);
+    // 🛑 CRITICAL FIX: Only run if user ID changes (primitive check),
+    // not on every user object reference update.
+    if (user?.id) {
+      fetchUserRoles();
+    } else if (!user) {
+      setUserRoles([]);
+      setCurrentOrgRole(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const getRoleInOrg = (orgId: string): OrganizationRole => {
     const org = userRoles.find((o) => o.organization_id === orgId);
-    return org?.role || 'user';
+    return org?.role || "user";
   };
 
   const isOwner = (orgId: string): boolean => {
@@ -77,14 +93,17 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
     await fetchUserRoles();
   };
 
-  const hasPermission = (orgId: string, requiredRole: OrganizationRole): boolean => {
+  const hasPermission = (
+    orgId: string,
+    requiredRole: OrganizationRole
+  ): boolean => {
     const userRole = getRoleInOrg(orgId);
     return OrganizationRolesService.hasPermission(userRole, requiredRole);
   };
 
   const canManageRoles = (orgId: string): boolean => {
     const userRole = getRoleInOrg(orgId);
-    return userRole === 'admin' || userRole === 'super_admin';
+    return userRole === "admin" || userRole === "super_admin";
   };
 
   const value: RoleContextType = {
@@ -106,7 +125,7 @@ export const RoleProvider = ({ children }: RoleProviderProps) => {
 export const useRole = (): RoleContextType => {
   const context = useContext(RoleContext);
   if (context === undefined) {
-    throw new Error('useRole must be used within a RoleProvider');
+    throw new Error("useRole must be used within a RoleProvider");
   }
   return context;
 };

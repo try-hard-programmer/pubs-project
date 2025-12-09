@@ -3,11 +3,20 @@
  * Manages current user's organization data with session-based localStorage caching
  */
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useAuth } from './AuthContext';
-import { OrganizationService, Organization } from '@/services/organizationService';
-import { organizationStorage } from '@/lib/organizationStorage';
-import { useDebugState, logContextAction } from '@/lib/debuggableContext';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import { useAuth } from "./AuthContext";
+import {
+  OrganizationService,
+  Organization,
+} from "@/services/organizationService";
+import { organizationStorage } from "@/lib/organizationStorage";
+import { useDebugState, logContextAction } from "@/lib/debuggableContext";
 
 /**
  * Organization Context Type
@@ -19,12 +28,16 @@ interface OrganizationContextType {
   loading: boolean;
   /** Error message if fetch fails */
   error: string | null;
+  /** Manual refresh function */
+  refreshOrganization: () => Promise<void>;
 }
 
 /**
  * Create Organization Context
  */
-const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
+const OrganizationContext = createContext<OrganizationContextType | undefined>(
+  undefined
+);
 
 /**
  * Organization Provider Props
@@ -39,17 +52,28 @@ interface OrganizationProviderProps {
  *
  * @param props - Provider props
  */
-export const OrganizationProvider = ({ children }: OrganizationProviderProps) => {
-  const [currentOrganization, setCurrentOrganization] = useDebugState<Organization | null>('Organization', 'current', null);
-  const [loading, setLoading] = useDebugState<boolean>('Organization', 'loading', true);
-  const [error, setError] = useDebugState<string | null>('Organization', 'error', null);
+export const OrganizationProvider = ({
+  children,
+}: OrganizationProviderProps) => {
+  const [currentOrganization, setCurrentOrganization] =
+    useDebugState<Organization | null>("Organization", "current", null);
+  const [loading, setLoading] = useDebugState<boolean>(
+    "Organization",
+    "loading",
+    true
+  );
+  const [error, setError] = useDebugState<string | null>(
+    "Organization",
+    "error",
+    null
+  );
   const { user } = useAuth();
 
   /**
    * Fetch organization from API
    * Called when user logs in or when cache is empty
    */
-  const fetchOrganization = async () => {
+  const fetchOrganization = async (forceRefetch = false) => {
     if (!user) {
       // User not logged in - clear state
       setCurrentOrganization(null);
@@ -58,39 +82,46 @@ export const OrganizationProvider = ({ children }: OrganizationProviderProps) =>
       return;
     }
 
-    // Try loading from cache first (instant load)
-    const cached = organizationStorage.load();
-    if (cached) {
-      console.log('✅ Using cached organization:', cached.name);
-      logContextAction('Organization', 'LOADED_FROM_CACHE', { id: cached.id, name: cached.name });
-      setCurrentOrganization(cached);
-      setLoading(false);
-      setError(null);
-      return;
+    // Try loading from cache first (instant load) - ONLY if not forced
+    if (!forceRefetch) {
+      const cached = organizationStorage.load();
+      if (cached) {
+        console.log("✅ Using cached organization:", cached.name);
+        logContextAction("Organization", "LOADED_FROM_CACHE", {
+          id: cached.id,
+          name: cached.name,
+        });
+        setCurrentOrganization(cached);
+        setLoading(false);
+        setError(null);
+        return;
+      }
     }
 
-    // No cache - fetch from API
-    console.log('🔄 Fetching organization from API...');
-    logContextAction('Organization', 'FETCH_STARTED', null);
+    // No cache or forced refresh - fetch from API
+    console.log("🔄 Fetching organization from API...");
+    logContextAction("Organization", "FETCH_STARTED", null);
     setLoading(true);
     setError(null);
 
     try {
       const organization = await OrganizationService.getMyOrganization();
-      setCurrentOrganization(organization);
-      setError(null);
-
-      // Save to cache for next time
-      organizationStorage.save(organization);
-
-      console.log('✅ Organization loaded from API:', organization.name);
-      logContextAction('Organization', 'FETCH_SUCCESS', { id: organization.id, name: organization.name });
+      if (organization && organization.id) {
+        setCurrentOrganization(organization);
+        organizationStorage.save(organization);
+        setError(null);
+      } else {
+        // If API returns 200 but data is null/empty, treat as no org
+        console.log("⚠️ API returned 200 but no valid organization found");
+        setCurrentOrganization(null);
+        // Do NOT set error here, or ProtectedRoute might show error state instead of redirecting
+      }
     } catch (err: any) {
-      console.error('❌ Error fetching organization:', err);
-      const errorMessage = err.message || 'Failed to fetch organization';
+      console.error("❌ Error fetching organization:", err);
+      const errorMessage = err.message || "Failed to fetch organization";
       setError(errorMessage);
       setCurrentOrganization(null);
-      logContextAction('Organization', 'FETCH_ERROR', { error: errorMessage });
+      logContextAction("Organization", "FETCH_ERROR", { error: errorMessage });
 
       // Clear any corrupted cache
       organizationStorage.clear();
@@ -104,8 +135,16 @@ export const OrganizationProvider = ({ children }: OrganizationProviderProps) =>
    * Runs on mount and when user logs in/out
    */
   useEffect(() => {
-    fetchOrganization();
-  }, [user]);
+    // 🛑 CRITICAL FIX: Only run if user ID changes (primitive string),
+    // not the user object reference. This stops the loop.
+    if (user?.id) {
+      fetchOrganization();
+    } else if (!user) {
+      setCurrentOrganization(null);
+      setLoading(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   /**
    * Effect: Clear organization data on unmount
@@ -114,7 +153,6 @@ export const OrganizationProvider = ({ children }: OrganizationProviderProps) =>
   useEffect(() => {
     return () => {
       // Cleanup function - no action needed for session-based cache
-      // Cache persists until explicit logout
     };
   }, []);
 
@@ -125,6 +163,7 @@ export const OrganizationProvider = ({ children }: OrganizationProviderProps) =>
     currentOrganization,
     loading,
     error,
+    refreshOrganization: () => fetchOrganization(true),
   };
 
   return (
@@ -137,25 +176,13 @@ export const OrganizationProvider = ({ children }: OrganizationProviderProps) =>
 /**
  * useOrganization Hook
  * Access organization context in components
- *
- * @returns OrganizationContextType
- * @throws Error if used outside OrganizationProvider
- *
- * @example
- * ```tsx
- * const { currentOrganization, loading, error } = useOrganization();
- *
- * if (loading) return <div>Loading organization...</div>;
- * if (error) return <div>Error: {error}</div>;
- * if (!currentOrganization) return <div>No organization</div>;
- *
- * return <div>{currentOrganization.name}</div>;
- * ```
  */
 export const useOrganization = (): OrganizationContextType => {
   const context = useContext(OrganizationContext);
   if (context === undefined) {
-    throw new Error('useOrganization must be used within an OrganizationProvider');
+    throw new Error(
+      "useOrganization must be used within an OrganizationProvider"
+    );
   }
   return context;
 };
