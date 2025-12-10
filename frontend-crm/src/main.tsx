@@ -29,6 +29,9 @@ import { UsageBilling } from "./pages/UsageBilling";
 import { CRM } from "./pages/CRM";
 import NotFound from "./pages/NotFound";
 
+import { ResetPassword } from "./pages/ResetPassword";
+import { PasswordRecoveryHandler } from "./components/forget-password/PasswordRecoveryHandler";
+
 const queryClient = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(
@@ -46,6 +49,7 @@ createRoot(document.getElementById("root")!).render(
               <NotificationPreferencesProvider>
                 <WebSocketProvider>
                   <HashRouter>
+                    <PasswordRecoveryHandler />
                     <GlobalChatNotifications />
                     <Routes>
                       <Route
@@ -65,6 +69,10 @@ createRoot(document.getElementById("root")!).render(
                         }
                       />
                       <Route path="/auth" element={<AuthPage />} />
+                      <Route
+                        path="/auth/reset-password"
+                        element={<ResetPassword />}
+                      />
                       <Route
                         path="/dashboard"
                         element={

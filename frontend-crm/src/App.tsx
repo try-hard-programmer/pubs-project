@@ -6,7 +6,7 @@ import { Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/AuthPage";
-import { ProtectedRoute } from "./components/ProtectedRoute"; // Import the guard
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 

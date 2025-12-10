@@ -1296,6 +1296,20 @@ export const CustomerService = ({
     }
   };
 
+  const handleDeleteAgent = async (agentId: string) => {
+    try {
+      await crmAgentsService.deleteAgent(agentId);
+
+      // Update local state to remove the agent immediately
+      setAgents((prev) => prev.filter((agent) => agent.id !== agentId));
+
+      toast.success("Agent berhasil dihapus");
+    } catch (error) {
+      console.error("Error deleting agent:", error);
+      toast.error("Gagal menghapus agent. Silakan coba lagi.");
+    }
+  };
+
   const allTickets = chats.flatMap((chat) =>
     (chat.tickets || []).map((ticket) => ({
       ...ticket,
@@ -1452,6 +1466,7 @@ export const CustomerService = ({
         onAddAgent={handleAddAgent}
         onUpdateAgentStatus={handleUpdateAgentStatus}
         onSaveAgentSettings={handleSaveAgentSettings}
+        onDeleteAgent={handleDeleteAgent}
       />
 
       <NewChatModal

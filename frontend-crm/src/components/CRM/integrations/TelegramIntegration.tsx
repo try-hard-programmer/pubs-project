@@ -20,6 +20,7 @@ import {
   MessageSquare,
   LogOut,
   ArrowRight,
+  Info,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -245,18 +246,43 @@ export const TelegramIntegration = ({
 
   const renderCredentials = () => (
     <div className="space-y-4 animate-in fade-in">
-      <Alert className="bg-sky-50 border-sky-200">
-        <AlertDescription className="text-sky-800 text-xs">
-          Dapatkan ID & Hash dari{" "}
-          <a
-            href="https://my.telegram.org"
-            target="_blank"
-            className="underline font-bold"
-          >
-            my.telegram.org
-          </a>
-        </AlertDescription>
-      </Alert>
+      {/* 🔹 MANUAL GUIDANCE SECTION */}
+      <div className="rounded-md bg-blue-50 p-4 border border-blue-100 text-sm space-y-3">
+        <div className="flex items-center gap-2 font-semibold text-blue-800">
+          <Info className="h-4 w-4" />
+          Panduan Mendapatkan API ID & Hash
+        </div>
+        <ol className="list-decimal list-inside space-y-1 text-blue-700 text-xs">
+          <li>
+            Buka website{" "}
+            <a
+              href="https://my.telegram.org"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline font-medium hover:text-blue-900"
+            >
+              my.telegram.org
+            </a>
+          </li>
+          <li>
+            Login menggunakan nomor HP agent ini:{" "}
+            <span className="font-mono font-bold bg-blue-100 px-1 rounded text-blue-900">
+              {agentPhoneNumber}
+            </span>
+          </li>
+          <li>
+            Pilih menu <strong>"API development tools"</strong>.
+          </li>
+          <li>
+            Isi form <em>App title</em> dan <em>Shortname</em> (bebas).
+          </li>
+          <li>
+            Salin <strong>api_id</strong> dan <strong>api_hash</strong> ke form
+            di bawah ini.
+          </li>
+        </ol>
+      </div>
+
       <div className="space-y-2">
         <Label>App api_id</Label>
         <Input
@@ -325,7 +351,7 @@ export const TelegramIntegration = ({
     <div className="space-y-4 animate-in fade-in">
       <Alert className="bg-green-50 border-green-200">
         <AlertDescription className="text-green-800">
-          Cek Telegram Anda untuk kode login.
+          Cek Telegram Anda (di HP atau App) untuk kode login.
         </AlertDescription>
       </Alert>
       <div className="space-y-2">

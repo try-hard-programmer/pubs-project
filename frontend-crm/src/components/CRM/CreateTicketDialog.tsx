@@ -33,38 +33,63 @@ interface CreateTicketDialogProps {
   onCreate: (ticket: Ticket) => void;
 }
 
-export const CreateTicketDialog = ({ open, onClose, onCreate }: CreateTicketDialogProps) => {
+export const CreateTicketDialog = ({
+  open,
+  onClose,
+  onCreate,
+}: CreateTicketDialogProps) => {
   const [formData, setFormData] = useState<Ticket>({
     title: "",
     description: "",
     category: "",
-    priority: "medium",
+    priority: "low",
     status: "open",
   });
 
-  const [errors, setErrors] = useState<Partial<Record<keyof Ticket, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<keyof Ticket, string>>>(
+    {}
+  );
 
   const handleChange = (field: keyof Ticket, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
+
+    // Clear error immediately when user fixes it
     if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
+      setErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
     }
   };
 
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof Ticket, string>> = {};
 
-    if (!formData.title.trim()) {
+    // Strict Title Validation
+    const title = formData.title.trim();
+    if (!title) {
       newErrors.title = "Title is required";
+    } else if (title.length < 5) {
+      newErrors.title = "Title must be at least 5 characters";
+    } else if (title.length > 100) {
+      newErrors.title = "Title must be less than 100 characters";
     }
 
-    if (!formData.description.trim()) {
+    // Strict Description Validation
+    const desc = formData.description.trim();
+    if (!desc) {
       newErrors.description = "Description is required";
+    } else if (desc.length < 10) {
+      newErrors.description =
+        "Please provide more detail (at least 10 characters)";
+    } else if (desc.length > 300) {
+      newErrors.description = "Description is too long (max 500 characters)";
     }
 
+    // Category Validation
     if (!formData.category.trim()) {
-      newErrors.category = "Category is required";
+      newErrors.category = "Please select a valid category";
     }
 
     setErrors(newErrors);
@@ -76,25 +101,16 @@ export const CreateTicketDialog = ({ open, onClose, onCreate }: CreateTicketDial
 
     if (validateForm()) {
       onCreate(formData);
-      // Reset form
-      setFormData({
-        title: "",
-        description: "",
-        category: "",
-        priority: "medium",
-        status: "open",
-      });
-      setErrors({});
+      handleClose(); // Close and reset on success
     }
   };
 
   const handleClose = () => {
-    // Reset form when closing
     setFormData({
       title: "",
       description: "",
       category: "",
-      priority: "medium",
+      priority: "low",
       status: "open",
     });
     setErrors({});
@@ -102,7 +118,7 @@ export const CreateTicketDialog = ({ open, onClose, onCreate }: CreateTicketDial
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleClose()}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Create New Ticket</DialogTitle>
@@ -116,12 +132,20 @@ export const CreateTicketDialog = ({ open, onClose, onCreate }: CreateTicketDial
             </Label>
             <Input
               id="title"
-              placeholder="Enter ticket title"
+              placeholder="e.g. Login page is not loading"
               value={formData.title}
               onChange={(e) => handleChange("title", e.target.value)}
-              className={errors.title ? "border-red-500" : ""}
+              className={
+                errors.title ? "border-red-500 focus-visible:ring-red-500" : ""
+              }
             />
-            {errors.title && <p className="text-xs text-red-500">{errors.title}</p>}
+            {errors.title ? (
+              <p className="text-xs text-red-500 font-medium">{errors.title}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground text-right">
+                {formData.title.length}/100
+              </p>
+            )}
           </div>
 
           {/* Description */}
@@ -131,13 +155,25 @@ export const CreateTicketDialog = ({ open, onClose, onCreate }: CreateTicketDial
             </Label>
             <Textarea
               id="description"
-              placeholder="Describe the issue..."
+              placeholder="Please describe the issue in detail..."
               rows={4}
               value={formData.description}
               onChange={(e) => handleChange("description", e.target.value)}
-              className={errors.description ? "border-red-500" : ""}
+              className={
+                errors.description
+                  ? "border-red-500 focus-visible:ring-red-500"
+                  : ""
+              }
             />
-            {errors.description && <p className="text-xs text-red-500">{errors.description}</p>}
+            {errors.description ? (
+              <p className="text-xs text-red-500 font-medium">
+                {errors.description}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground text-right">
+                {formData.description.length}/300
+              </p>
+            )}
           </div>
 
           {/* Category */}
@@ -149,20 +185,33 @@ export const CreateTicketDialog = ({ open, onClose, onCreate }: CreateTicketDial
               value={formData.category}
               onValueChange={(value) => handleChange("category", value)}
             >
-              <SelectTrigger id="category" className={errors.category ? "border-red-500" : ""}>
+              <SelectTrigger
+                id="category"
+                className={
+                  errors.category ? "border-red-500 focus:ring-red-500" : ""
+                }
+              >
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Technical Support">Technical Support</SelectItem>
+                <SelectItem value="Technical Support">
+                  Technical Support
+                </SelectItem>
                 <SelectItem value="Billing">Billing</SelectItem>
                 <SelectItem value="General Inquiry">General Inquiry</SelectItem>
-                <SelectItem value="Product Question">Product Question</SelectItem>
+                <SelectItem value="Product Question">
+                  Product Question
+                </SelectItem>
                 <SelectItem value="Complaint">Complaint</SelectItem>
                 <SelectItem value="Payment">Payment</SelectItem>
                 <SelectItem value="Refund">Refund</SelectItem>
               </SelectContent>
             </Select>
-            {errors.category && <p className="text-xs text-red-500">{errors.category}</p>}
+            {errors.category && (
+              <p className="text-xs text-red-500 font-medium">
+                {errors.category}
+              </p>
+            )}
           </div>
 
           {/* Priority */}

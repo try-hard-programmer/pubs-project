@@ -5,6 +5,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -20,6 +30,7 @@ import {
   MessageSquare,
   MoreVertical,
   Settings,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -49,9 +60,22 @@ interface AgentManagementModalProps {
   open: boolean;
   onClose: () => void;
   agents: Agent[];
-  onAddAgent: (agent: Omit<Agent, "id" | "assignedChats" | "resolvedToday" | "avgResponseTime" | "lastActive">) => void;
-  onUpdateAgentStatus: (agentId: string, status: "active" | "inactive" | "busy") => void;
+  onAddAgent: (
+    agent: Omit<
+      Agent,
+      | "id"
+      | "assignedChats"
+      | "resolvedToday"
+      | "avgResponseTime"
+      | "lastActive"
+    >
+  ) => void;
+  onUpdateAgentStatus: (
+    agentId: string,
+    status: "active" | "inactive" | "busy"
+  ) => void;
   onSaveAgentSettings: (agentId: string, settings: any) => void;
+  onDeleteAgent: (agentId: string) => void; // Added Prop
 }
 
 export const AgentManagementModal = ({
@@ -61,12 +85,21 @@ export const AgentManagementModal = ({
   onAddAgent,
   onUpdateAgentStatus,
   onSaveAgentSettings,
+  onDeleteAgent,
 }: AgentManagementModalProps) => {
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive" | "busy">("all");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "active" | "inactive" | "busy"
+  >("all");
   const [addAgentOpen, setAddAgentOpen] = useState(false);
+
+  // Settings State
   const [settingsAgent, setSettingsAgent] = useState<Agent | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Delete Confirmation State
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -102,7 +135,8 @@ export const AgentManagementModal = ({
       agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       agent.email.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesStatus = statusFilter === "all" || agent.status === statusFilter;
+    const matchesStatus =
+      statusFilter === "all" || agent.status === statusFilter;
 
     return matchesSearch && matchesStatus;
   });
@@ -112,7 +146,16 @@ export const AgentManagementModal = ({
   const busyAgents = agents.filter((a) => a.status === "busy").length;
   const inactiveAgents = agents.filter((a) => a.status === "inactive").length;
 
-  const handleAddAgent = (agentData: Omit<Agent, "id" | "assignedChats" | "resolvedToday" | "avgResponseTime" | "lastActive">) => {
+  const handleAddAgent = (
+    agentData: Omit<
+      Agent,
+      | "id"
+      | "assignedChats"
+      | "resolvedToday"
+      | "avgResponseTime"
+      | "lastActive"
+    >
+  ) => {
     onAddAgent(agentData);
     setAddAgentOpen(false);
   };
@@ -128,6 +171,19 @@ export const AgentManagementModal = ({
     setSettingsAgent(null);
   };
 
+  const confirmDelete = (agent: Agent) => {
+    setAgentToDelete(agent);
+    setDeleteDialogOpen(true);
+  };
+
+  const executeDelete = () => {
+    if (agentToDelete) {
+      onDeleteAgent(agentToDelete.id);
+      setDeleteDialogOpen(false);
+      setAgentToDelete(null);
+    }
+  };
+
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
@@ -135,7 +191,9 @@ export const AgentManagementModal = ({
           <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
             <div className="flex items-center justify-between">
               <div>
-                <DialogTitle className="text-2xl font-bold">Agent Management</DialogTitle>
+                <DialogTitle className="text-2xl font-bold">
+                  Agent Management
+                </DialogTitle>
                 <p className="text-sm text-muted-foreground mt-1">
                   Kelola agents customer service Anda
                 </p>
@@ -156,15 +214,21 @@ export const AgentManagementModal = ({
                   <p className="text-xs text-muted-foreground">Total Agents</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-green-600">{activeAgents}</p>
+                  <p className="text-2xl font-bold text-green-600">
+                    {activeAgents}
+                  </p>
                   <p className="text-xs text-muted-foreground">Active</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-yellow-600">{busyAgents}</p>
+                  <p className="text-2xl font-bold text-yellow-600">
+                    {busyAgents}
+                  </p>
                   <p className="text-xs text-muted-foreground">Busy</p>
                 </div>
                 <div className="text-center">
-                  <p className="text-2xl font-bold text-muted-foreground">{inactiveAgents}</p>
+                  <p className="text-2xl font-bold text-muted-foreground">
+                    {inactiveAgents}
+                  </p>
                   <p className="text-xs text-muted-foreground">Inactive</p>
                 </div>
               </div>
@@ -223,7 +287,10 @@ export const AgentManagementModal = ({
                   </div>
                 ) : (
                   filteredAgents.map((agent) => (
-                    <Card key={agent.id} className="hover:shadow-md transition-shadow">
+                    <Card
+                      key={agent.id}
+                      className="hover:shadow-md transition-shadow"
+                    >
                       <CardContent className="p-4">
                         <div className="flex items-start gap-4">
                           {/* Avatar */}
@@ -240,7 +307,9 @@ export const AgentManagementModal = ({
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between mb-2">
                               <div>
-                                <h3 className="font-semibold text-lg">{agent.name}</h3>
+                                <h3 className="font-semibold text-lg">
+                                  {agent.name}
+                                </h3>
                                 {getStatusBadge(agent.status)}
                               </div>
                               <DropdownMenu>
@@ -258,22 +327,32 @@ export const AgentManagementModal = ({
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
                                   <DropdownMenuItem
-                                    onClick={() => onUpdateAgentStatus(agent.id, "active")}
+                                    onClick={() =>
+                                      onUpdateAgentStatus(agent.id, "active")
+                                    }
                                   >
                                     Set as Active
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => onUpdateAgentStatus(agent.id, "busy")}
+                                    onClick={() =>
+                                      onUpdateAgentStatus(agent.id, "busy")
+                                    }
                                   >
                                     Set as Busy
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={() => onUpdateAgentStatus(agent.id, "inactive")}
+                                    onClick={() =>
+                                      onUpdateAgentStatus(agent.id, "inactive")
+                                    }
                                   >
                                     Set as Inactive
                                   </DropdownMenuItem>
                                   <DropdownMenuSeparator />
-                                  <DropdownMenuItem className="text-red-600">
+                                  <DropdownMenuItem
+                                    className="text-red-600 focus:text-red-600 focus:bg-red-50 cursor-pointer"
+                                    onClick={() => confirmDelete(agent)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
                                     Remove Agent
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -291,7 +370,9 @@ export const AgentManagementModal = ({
                               </div>
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <MessageSquare className="h-3.5 w-3.5" />
-                                <span>{agent.assignedChats} assigned chats</span>
+                                <span>
+                                  {agent.assignedChats} assigned chats
+                                </span>
                               </div>
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <Clock className="h-3.5 w-3.5" />
@@ -304,11 +385,17 @@ export const AgentManagementModal = ({
                                 <p className="text-lg font-bold text-green-600">
                                   {agent.resolvedToday}
                                 </p>
-                                <p className="text-xs text-muted-foreground">Resolved Today</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Resolved Today
+                                </p>
                               </div>
                               <div className="text-center">
-                                <p className="text-lg font-bold">{agent.avgResponseTime}</p>
-                                <p className="text-xs text-muted-foreground">Avg Response</p>
+                                <p className="text-lg font-bold">
+                                  {agent.avgResponseTime}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Avg Response
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -346,6 +433,33 @@ export const AgentManagementModal = ({
         agent={settingsAgent}
         onSave={handleSaveSettings}
       />
+
+      {/* Delete Confirmation Alert */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the
+              agent
+              <span className="font-semibold text-foreground">
+                {" "}
+                {agentToDelete?.name}{" "}
+              </span>
+              and remove their data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeDelete}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+            >
+              Delete Agent
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

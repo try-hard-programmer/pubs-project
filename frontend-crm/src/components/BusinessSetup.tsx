@@ -20,7 +20,9 @@ import {
 import { toast } from "sonner";
 import { apiClient } from "@/lib/apiClient";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { Loader2 } from "lucide-react";
+// ✅ 1. Import Role Context
+import { useRole } from "@/contexts/RoleContext";
+import { Loader2, AlertCircle } from "lucide-react";
 import { useTheme } from "next-themes";
 
 interface BusinessSetupProps {
@@ -30,14 +32,16 @@ interface BusinessSetupProps {
 
 const STORAGE_KEY = "syntra_business_setup_draft";
 
+const BUSINESS_NAME_REGEX = /^[a-zA-Z0-9\s.,&'()/-]+$/;
+
 export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
   const [loading, setLoading] = useState(false);
   const { theme } = useTheme();
 
-  // ✅ 1. Import Context to fix the "Loop"
+  // ✅ 2. Get refreshers for BOTH contexts
   const { refreshOrganization, currentOrganization } = useOrganization();
+  const { refreshRoles } = useRole();
 
-  // ✅ 2. Initialize from LocalStorage (Fixes "Form Auto Clear")
   const [formData, setFormData] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -49,12 +53,10 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
     }
   });
 
-  // ✅ 3. Auto-save to LocalStorage
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
   }, [formData]);
 
-  // ✅ 4. Auto-redirect if organization appears (Fixes Race Conditions)
   useEffect(() => {
     if (currentOrganization) {
       onComplete();
@@ -80,6 +82,11 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
     { value: "other", label: "Other" },
   ];
 
+  const validateInput = (value: string) => {
+    if (!value) return true;
+    return BUSINESS_NAME_REGEX.test(value);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -88,24 +95,40 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
       return;
     }
 
+    if (!validateInput(formData.name)) {
+      toast.error(
+        "Business Name contains invalid characters. Only letters, numbers, and standard punctuation (.,-&'/) are allowed."
+      );
+      return;
+    }
+
+    if (formData.legalName && !validateInput(formData.legalName)) {
+      toast.error(
+        "Legal Name contains invalid characters. No emojis or special symbols allowed."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
-      // Call API to create organization
       await apiClient.post<{ organization_id: string }>("/organizations", {
-        name: formData.name,
-        legal_name: formData.legalName || null,
+        name: formData.name.trim(),
+        legal_name: formData.legalName ? formData.legalName.trim() : null,
         category: formData.category,
-        description: formData.description || null,
+        description: formData.description ? formData.description.trim() : null,
         owner_id: userId,
       });
 
-      // Clear draft upon success
       localStorage.removeItem(STORAGE_KEY);
       toast.success("Business information saved successfully!");
 
-      // ✅ 5. Force refresh context to enter Dashboard
-      await refreshOrganization();
+      // ✅ 3. Refresh BOTH Organization AND Roles
+      await Promise.all([
+        refreshOrganization(),
+        refreshRoles(), // <--- Critical fix
+      ]);
+
       onComplete();
     } catch (error: any) {
       console.error("Error creating organization:", error);
@@ -117,34 +140,22 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
         toast.error(
           "Session sync error. Your account may have been deleted. Logging out..."
         );
-
-        // 🧨 NUCLEAR OPTION: Destroy all evidence
-        // Remove the specific Supabase token (replace with your actual project key if different)
         localStorage.removeItem("sb-ogiagiflmsjvuhknmihh-auth-token");
-
-        // Remove the form draft so they don't reload with the same bad data
         localStorage.removeItem(STORAGE_KEY);
-
-        // Optional: Clear everything else to be safe
-        // localStorage.clear();
-
-        // Redirect immediately to Register to recreate the account
         setTimeout(() => {
-          window.location.href = "/register";
+          window.location.href = "/auth";
         }, 1500);
-
         return;
       }
 
-      // ✅ 6. INTELLIGENT RECOVERY: If org already exists, sync state!
       if (
         error.message?.includes("already has an organization") ||
         error.message?.includes("unique constraint") ||
         error.message?.includes("already exists")
       ) {
         toast.info("It seems you already have an organization. Syncing...");
-        await refreshOrganization();
-        // The useEffect above will detect the new org and trigger onComplete()
+        // ✅ 4. Refresh both here too for recovery
+        await Promise.all([refreshOrganization(), refreshRoles()]);
         return;
       }
 
@@ -183,7 +194,6 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Business Name - Required */}
             <div className="space-y-2">
               <Label htmlFor="businessName" className="text-sm font-medium">
                 Business Name <span className="text-destructive">*</span>
@@ -196,12 +206,21 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
                 onChange={(e) =>
                   setFormData({ ...formData, name: e.target.value })
                 }
-                className="h-10"
+                className={
+                  formData.name && !validateInput(formData.name)
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : "h-10"
+                }
                 required
               />
+              {formData.name && !validateInput(formData.name) && (
+                <p className="text-[11px] text-destructive flex items-center gap-1 mt-1 font-medium">
+                  <AlertCircle className="w-3 h-3" />
+                  Invalid characters detected (emojis or symbols)
+                </p>
+              )}
             </div>
 
-            {/* Legal Business Name - Optional */}
             <div className="space-y-2">
               <Label htmlFor="legalName" className="text-sm font-medium">
                 Legal Business Name{" "}
@@ -217,14 +236,24 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
                 onChange={(e) =>
                   setFormData({ ...formData, legalName: e.target.value })
                 }
-                className="h-10"
+                className={
+                  formData.legalName && !validateInput(formData.legalName)
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : "h-10"
+                }
               />
-              <p className="text-xs text-muted-foreground">
-                Official registered business name (if different from above)
-              </p>
+              {formData.legalName && !validateInput(formData.legalName) ? (
+                <p className="text-[11px] text-destructive flex items-center gap-1 mt-1 font-medium">
+                  <AlertCircle className="w-3 h-3" />
+                  No emojis or special symbols allowed
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Official registered business name (e.g., PT. Maju Jaya)
+                </p>
+              )}
             </div>
 
-            {/* Business Category - Required */}
             <div className="space-y-2">
               <Label htmlFor="category" className="text-sm font-medium">
                 Business Category <span className="text-destructive">*</span>
@@ -249,7 +278,6 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
               </Select>
             </div>
 
-            {/* Business Description - Optional */}
             <div className="space-y-2">
               <Label htmlFor="description" className="text-sm font-medium">
                 Short Description{" "}
