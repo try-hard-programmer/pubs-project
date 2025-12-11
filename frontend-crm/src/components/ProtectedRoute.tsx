@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 // Import the Organization Context
@@ -14,6 +14,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   // Get organization state
   const { currentOrganization, loading: orgLoading } = useOrganization();
   const navigate = useNavigate();
+  const [checkingOrg, setCheckingOrg] = useState(true);
 
   useEffect(() => {
     if (!authLoading && !orgLoading) {

@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { X, Download, ZoomIn, ZoomOut, RotateCw, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { FileItem } from "@/hooks/useFiles";
 import { toast } from "sonner";
@@ -13,11 +18,11 @@ interface FilePreviewProps {
 }
 
 const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 Bytes';
+  if (bytes === 0) return "0 Bytes";
   const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const sizes = ["Bytes", "KB", "MB", "GB"];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 };
 
 const PDFViewer = ({ url }: { url: string }) => {
@@ -36,9 +41,9 @@ const ImageViewer = ({ url, name }: { url: string; name: string }) => {
   const [zoom, setZoom] = useState(100);
   const [rotation, setRotation] = useState(0);
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 300));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 25, 25));
-  const handleRotate = () => setRotation(prev => (prev + 90) % 360);
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 300));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 25));
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
 
   return (
     <div className="space-y-4">
@@ -100,12 +105,26 @@ const AudioViewer = ({ url, name }: { url: string; name: string }) => {
   );
 };
 
-const DocumentViewer = ({ url, name, type }: { url: string; name: string; type: string }) => {
-  const isOfficeDoc = type.includes('officedocument') || type.includes('msword') || type.includes('excel') || type.includes('powerpoint');
-  
+const DocumentViewer = ({
+  url,
+  name,
+  type,
+}: {
+  url: string;
+  name: string;
+  type: string;
+}) => {
+  const isOfficeDoc =
+    type.includes("officedocument") ||
+    type.includes("msword") ||
+    type.includes("excel") ||
+    type.includes("powerpoint");
+
   if (isOfficeDoc) {
     // Use Microsoft Office Online viewer for Office documents
-    const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`;
+    const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
+      url
+    )}`;
     return (
       <div className="w-full h-[600px]">
         <iframe
@@ -125,7 +144,8 @@ const DocumentViewer = ({ url, name, type }: { url: string; name: string; type: 
         </div>
         <h3 className="text-lg font-medium">{name}</h3>
         <p className="text-muted-foreground">
-          Preview not available for this file type. Click download to view the file.
+          Preview not available for this file type. Click download to view the
+          file.
         </p>
       </div>
     </div>
@@ -133,29 +153,44 @@ const DocumentViewer = ({ url, name, type }: { url: string; name: string; type: 
 };
 
 const getFileTypeCategory = (type: string) => {
-  if (type.startsWith('image/')) return 'image';
-  if (type.startsWith('video/')) return 'video';
-  if (type.startsWith('audio/')) return 'audio';
-  if (type === 'application/pdf') return 'pdf';
-  if (type.includes('text/') || type.includes('document') || type.includes('word') || 
-      type.includes('excel') || type.includes('powerpoint') || type.includes('spreadsheet')) {
-    return 'document';
+  if (type.startsWith("image/")) return "image";
+  if (type.startsWith("video/")) return "video";
+  if (type.startsWith("audio/")) return "audio";
+  if (type === "application/pdf") return "pdf";
+  if (
+    type.includes("text/") ||
+    type.includes("document") ||
+    type.includes("word") ||
+    type.includes("excel") ||
+    type.includes("powerpoint") ||
+    type.includes("spreadsheet")
+  ) {
+    return "document";
   }
-  return 'other';
+  return "other";
 };
 
 export const FilePreview = ({ file, isOpen, onClose }: FilePreviewProps) => {
   if (!file || file.is_folder) return null;
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (file.url) {
-      const link = document.createElement('a');
-      link.href = file.url;
+      // const link = document.createElement('a');
+      // link.href = file.url;
+      // link.download = file.name;
+      // document.body.appendChild(link);
+      // link.click();
+      // document.body.removeChild(link);
+      const res = await fetch(file.url, { credentials: "omit" });
+      const blob = await res.blob();
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
       link.download = file.name;
       document.body.appendChild(link);
       link.click();
-      document.body.removeChild(link);
-      toast.success('File download started');
+      URL.revokeObjectURL(link.href);
+      link.remove();
+      toast.success("File download started");
     }
   };
 
@@ -177,18 +212,22 @@ export const FilePreview = ({ file, isOpen, onClose }: FilePreviewProps) => {
     }
 
     switch (fileCategory) {
-      case 'image':
+      case "image":
         return <ImageViewer url={file.url} name={file.name} />;
-      case 'video':
+      case "video":
         return <VideoViewer url={file.url} />;
-      case 'audio':
+      case "audio":
         return <AudioViewer url={file.url} name={file.name} />;
-      case 'pdf':
+      case "pdf":
         return <PDFViewer url={file.url} />;
-      case 'document':
-        return <DocumentViewer url={file.url} name={file.name} type={file.type} />;
+      case "document":
+        return (
+          <DocumentViewer url={file.url} name={file.name} type={file.type} />
+        );
       default:
-        return <DocumentViewer url={file.url} name={file.name} type={file.type} />;
+        return (
+          <DocumentViewer url={file.url} name={file.name} type={file.type} />
+        );
     }
   };
 
@@ -209,19 +248,19 @@ export const FilePreview = ({ file, isOpen, onClose }: FilePreviewProps) => {
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span>{formatFileSize(file.size)}</span>
             <span>•</span>
-            <span>{new Date(file.created_at).toLocaleDateString('id-ID', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit'
-            })}</span>
+            <span>
+              {new Date(file.created_at).toLocaleDateString("id-ID", {
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
           </div>
         </DialogHeader>
-        
-        <div className="flex-1 overflow-auto">
-          {renderPreview()}
-        </div>
+
+        <div className="flex-1 overflow-auto">{renderPreview()}</div>
       </DialogContent>
     </Dialog>
   );

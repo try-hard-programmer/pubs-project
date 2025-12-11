@@ -19,13 +19,23 @@ export interface FileItem {
   url?: string;
   is_shared?: boolean;
   shared_by?: string;
-  access_level?: "view" | "download" | "edit";
+  access_level?: "view" | "edit" | "delete" | "share" | "manage";
   metadata?: Record<string, any>;
+  shared?: fileManagerApi.ShareResponse[];
 }
 
 export const useFiles = (
-  filter?: "starred" | "trashed" | "shared" | "images" | "documents" | "videos" | "all",
-  currentFolderId?: string | null
+  filter?:
+    | "starred"
+    | "trashed"
+    | "shared"
+    | "images"
+    | "documents"
+    | "videos"
+    | "all",
+  currentFolderId?: string | null,
+  sortBy?: "name" | "size" | "created_at",
+  sortOrder?: "asc" | "desc"
 ) => {
   const { user } = useAuth();
   console.log("user", user);
@@ -36,63 +46,94 @@ export const useFiles = (
     isLoading,
     error,
   } = useQuery({
-    queryKey: ["files", filter, currentFolderId],
+    queryKey: ["files", filter, currentFolderId, sortBy, sortOrder],
     queryFn: async () => {
       if (!user) return [];
+      console.log("USEFILES TRIGGERED", {
+        filter,
+        currentFolderId,
+        sortBy,
+        sortOrder,
+      });
 
       try {
-        // Build filter options based on the filter type
-        const apiFilters: any = {};
-
         // Apply folder navigation
         const folderId = currentFolderId || undefined;
 
-        // Apply type-based filters
-        if (filter === "starred") {
-          apiFilters.is_starred = true;
-          apiFilters.is_trashed = false;
-        } else if (filter === "trashed") {
-          apiFilters.is_trashed = true;
-        } else if (filter === "images" || filter === "documents" || filter === "videos") {
-          // Note: API might not support MIME type filtering, so we'll filter client-side
-          apiFilters.type = "file";
-          apiFilters.is_trashed = false;
-        } else if (filter === "shared") {
-          // Shared files will be handled separately
-          apiFilters.is_trashed = false;
-        } else {
-          // Default and "all" filter
-          apiFilters.is_trashed = false;
-        }
+        // Build filter untuk API dalam satu objek
+        const apiFilters: Record<string, any> =
+          filter === "starred"
+            ? { is_starred: true, is_trashed: false }
+            : filter === "trashed"
+            ? { is_trashed: true }
+            : filter === "images" ||
+              filter === "documents" ||
+              filter === "videos"
+            ? { type: "file", is_trashed: false }
+            : filter === "shared"
+            ? {}
+            : { is_trashed: false };
 
-        // Fetch files from API
-        const response = await fileManagerApi.browseFolder(folderId, apiFilters);
-
-        let allFiles = response.items || [];
-
-        // Apply client-side MIME type filtering if needed
-        if (filter === "images") {
-          allFiles = allFiles.filter(f => f.mime_type?.startsWith("image/"));
-        } else if (filter === "documents") {
-          allFiles = allFiles.filter(f => {
-            const mime = f.mime_type || "";
-            return (
-              mime.includes("pdf") ||
-              mime.includes("document") ||
-              mime.includes("word") ||
-              mime.includes("text") ||
-              mime.includes("excel") ||
-              mime.includes("spreadsheet") ||
-              mime.includes("powerpoint") ||
-              mime.includes("presentation")
-            );
+        // Ambil data: bedakan shared vs non-shared
+        let rawItems: any[] = [];
+        if (filter !== "shared") {
+          const response = await fileManagerApi.browseFolder(folderId, {
+            ...apiFilters,
+            sort_by: sortBy,
+            sort_order: sortOrder,
           });
-        } else if (filter === "videos") {
-          allFiles = allFiles.filter(f => f.mime_type?.startsWith("video/"));
+          rawItems = (response.items || []).map((item: any) => ({
+            ...item,
+            is_shared: item.is_shared ?? false,
+            shared: item.shared ?? [],
+          }));
+        } else {
+          const shares = await fileManagerApi.listShareFile();
+          rawItems = Array.isArray(shares)
+            ? shares.map((share: any) => ({
+                ...share.file,
+                shared: [
+                  {
+                    id: share.id,
+                    access_level: share.access_level,
+                    expires_at: share.expires_at,
+                    share_type: share.share_type,
+                    shared_by: share.shared_by,
+                    shared_with_email: share.shared_with_email,
+                    shared_with_user_id: share.shared_with_user_id,
+                    created_at: share.created_at,
+                    updated_at: share.updated_at,
+                    metadata: share.metadata,
+                  },
+                ],
+              }))
+            : [];
         }
+
+        // Client-side MIME filter
+        const itemsAfterMime =
+          filter === "images"
+            ? rawItems.filter((f) => f.mime_type?.startsWith("image/"))
+            : filter === "videos"
+            ? rawItems.filter((f) => f.mime_type?.startsWith("video/"))
+            : filter === "documents"
+            ? rawItems.filter((f) => {
+                const mime = (f.mime_type || "").toLowerCase();
+                return (
+                  mime.includes("pdf") ||
+                  mime.includes("document") ||
+                  mime.includes("word") ||
+                  mime.includes("text") ||
+                  mime.includes("excel") ||
+                  mime.includes("spreadsheet") ||
+                  mime.includes("powerpoint") ||
+                  mime.includes("presentation")
+                );
+              })
+            : rawItems;
 
         // Map API response to our FileItem interface
-        const mappedFiles = allFiles.map((item: any) => ({
+        const mappedFiles = itemsAfterMime.map((item: any) => ({
           id: item.id,
           name: item.name,
           size: item.size || 0,
@@ -106,31 +147,43 @@ export const useFiles = (
           created_at: item.created_at,
           updated_at: item.updated_at,
           metadata: item.metadata,
-          url: item.url || null, // ✅ Use signed URL from API
-          // For shared files, these would come from API if supported
-          is_shared: item.shared_with_user_ids?.length > 0 || item.shared_with_group_ids?.length > 0,
+          url: item.url || null,
+          is_shared: !!(Array.isArray(item.shared) && item.shared.length > 0),
+          shared: item.shared ?? [],
         }));
 
         console.log("API browse results:", {
           filter,
           currentFolderId: folderId,
           totalCount: mappedFiles.length,
-          folders: mappedFiles.filter(f => f.is_folder).length,
-          files: mappedFiles.filter(f => !f.is_folder).length,
-          filesWithUrls: mappedFiles.filter(f => !f.is_folder && f.url).length,
+          folders: mappedFiles.filter((f) => f.is_folder).length,
+          files: mappedFiles.filter((f) => !f.is_folder).length,
+          filesWithUrls: mappedFiles.filter((f) => !f.is_folder && f.url)
+            .length,
         });
 
         // Sort: folders first, then by creation date
         const sortedFiles = mappedFiles.sort((a, b) => {
+          // Folder selalu di atas, tapi tidak ubah urutan antar folder/file
           if (a.is_folder && !b.is_folder) return -1;
           if (!a.is_folder && b.is_folder) return 1;
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+
+          // Kalau API sudah handle sorting, tidak perlu ubah
+          if (sortBy && sortOrder) {
+            // Optional: kamu bisa skip return di sini
+            return 0;
+          }
+
+          // Default fallback kalau tidak ada sortBy/order
+          return (
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          );
         });
 
         console.log("Final processed results:", {
           count: sortedFiles.length,
-          folders: sortedFiles.filter(f => f.is_folder).length,
-          files: sortedFiles.filter(f => !f.is_folder).length,
+          folders: sortedFiles.filter((f) => f.is_folder).length,
+          files: sortedFiles.filter((f) => !f.is_folder).length,
         });
 
         return sortedFiles;
@@ -139,9 +192,18 @@ export const useFiles = (
         throw error;
       }
     },
-    enabled: !!user,
+    enabled: !!user && !!sortBy && !!sortOrder,
     staleTime: 0, // Always refetch
     gcTime: 0, // Don't cache
+  });
+
+  const detailFolderMutation = useMutation({
+    mutationFn: async ({ folderId }: { folderId: string }) => {
+      if (!user) throw new Error("User not authenticated");
+
+      const response = await fileManagerApi.detailFolder(folderId);
+      return response;
+    },
   });
 
   const createFolderMutation = useMutation({
@@ -176,6 +238,30 @@ export const useFiles = (
     },
   });
 
+  const updateFolderMutation = useMutation({
+    mutationFn: async ({
+      folderId,
+      name,
+    }: {
+      folderId: string;
+      name: string;
+    }) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Upload file via API
+      const update_folder = await fileManagerApi.updateFolder(folderId, {
+        name: name,
+      });
+
+      console.log("Folder update successfully:", update_folder);
+
+      return update_folder;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
   const uploadFileMutation = useMutation({
     mutationFn: async (file: File) => {
       if (!user) throw new Error("User not authenticated");
@@ -195,6 +281,20 @@ export const useFiles = (
       console.log("File uploaded successfully:", fileData);
 
       return fileData;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
+  const updateFileMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      if (!user) throw new Error("User not authenticated");
+
+      const update_file = await fileManagerApi.updateFile(id, { name: name });
+
+      console.log("File update successfully:", update_file);
+      return update_file;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["files"] });
@@ -228,9 +328,13 @@ export const useFiles = (
   });
 
   const moveToTrashMutation = useMutation({
-    mutationFn: async ({ id, is_folder }: { id: string; is_folder: boolean }) => {
-      console.log("Moving to trash:", { id, is_folder });
-
+    mutationFn: async ({
+      id,
+      is_folder,
+    }: {
+      id: string;
+      is_folder: boolean;
+    }) => {
       if (is_folder) {
         // Use folder endpoint for folders
         await fileManagerApi.deleteFolder(id, false); // false = move to trash
@@ -284,7 +388,13 @@ export const useFiles = (
   });
 
   const restoreFileMutation = useMutation({
-    mutationFn: async ({ id, is_folder }: { id: string; is_folder: boolean }) => {
+    mutationFn: async ({
+      id,
+      is_folder,
+    }: {
+      id: string;
+      is_folder: boolean;
+    }) => {
       console.log("Restoring from trash:", { id, is_folder });
 
       if (is_folder) {
@@ -324,6 +434,119 @@ export const useFiles = (
     },
   });
 
+  const moveFileToFolderMutation = useMutation({
+    mutationFn: async ({
+      fileId,
+      folderId,
+    }: {
+      fileId: string;
+      folderId: string | null;
+    }) => {
+      return await fileManagerApi.moveFile(fileId, folderId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
+  const shareFileMutation = useMutation({
+    mutationFn: async ({
+      file_id,
+      share_type = "user",
+      shared_with_email = null,
+      group_id = null,
+      access_level = "view",
+      expires_at = null,
+      metadata = {},
+    }: {
+      // Tidak perlu type terpisah; ini inline untuk IntelliSense minimal
+      file_id: string;
+      share_type?: fileManagerApi.ShareType;
+      shared_with_email?: string | null;
+      group_id?: string | null;
+      access_level?: fileManagerApi.PermissionType;
+      expires_at?: string | null;
+      metadata?: Record<string, any>;
+    }) => {
+      if (!user) throw new Error("User not authenticated");
+
+      // Upload file via API
+      return await fileManagerApi.shareFile({
+        file_id: file_id,
+        share_type: share_type,
+        shared_with_email: shared_with_email,
+        access_level: access_level,
+        expires_at: expires_at,
+        group_id: group_id,
+        metadata: metadata,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
+  const updateShareMutation = useMutation({
+    mutationFn: async ({
+      share_id,
+      access_level = "view",
+      expires_at = null,
+      metadata = {},
+    }: {
+      share_id: string;
+      access_level?: fileManagerApi.PermissionType;
+      expires_at?: string | null;
+      metadata?: Record<string, any>;
+    }) => {
+      if (!user) throw new Error("User not authenticated");
+      return await fileManagerApi.updateShare(
+        share_id,
+        access_level,
+        expires_at,
+        metadata
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
+  const deleteShareMutation = useMutation({
+    mutationFn: async ({ share_id }: { share_id: string }) => {
+      if (!user) throw new Error("User not authenticated");
+      return await fileManagerApi.deleteShare(share_id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    },
+  });
+
+  const createUrlPublicShareMutation = useMutation({
+    mutationFn: async ({
+      file_id,
+      permission,
+      expires_in_hours,
+    }: {
+      file_id: string;
+      permission?: fileManagerApi.PermissionType;
+      expires_in_hours?: number;
+    }) => {
+      if (!user) throw new Error("User not authenticated");
+      const result = await fileManagerApi.publicShareFile(
+        file_id,
+        permission,
+        expires_in_hours
+      );
+      return result;
+    },
+  });
+
+  const detailShareFile = useMutation({
+    mutationFn: async ({ file_id }: { file_id: string }) => {
+      return await fileManagerApi.listShareFile(file_id);
+    },
+  });
+
   console.log("useFiles hook returning:", {
     filesCount: files?.length || 0,
     isLoading,
@@ -336,13 +559,22 @@ export const useFiles = (
     isLoading,
     error,
     createFolder: createFolderMutation.mutateAsync,
+    updateFolder: updateFolderMutation.mutateAsync,
+    detailFolder: detailFolderMutation.mutateAsync,
     creatingFolder: createFolderMutation.isPending,
     uploadFile: uploadFileMutation.mutateAsync,
+    updateFile: updateFileMutation.mutateAsync,
+    moveFileToFolder: moveFileToFolderMutation.mutateAsync,
     uploading: uploadFileMutation.isPending,
     toggleStar: toggleStarMutation.mutateAsync,
     moveToTrash: moveToTrashMutation.mutateAsync,
     deleteFile: deleteFileMutation.mutateAsync,
     restoreFile: restoreFileMutation.mutateAsync,
     fetchFile: fetchFileMutation.mutateAsync,
+    shareFile: shareFileMutation.mutateAsync,
+    updateFileShare: updateShareMutation.mutateAsync,
+    deleteFileShare: deleteShareMutation.mutateAsync,
+    createPublicShareUrl: createUrlPublicShareMutation.mutateAsync,
+    fetchFileShareDetail: detailShareFile.mutateAsync,
   };
 };

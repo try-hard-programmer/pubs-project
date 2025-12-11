@@ -92,6 +92,7 @@ export const ResetPassword = () => {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  placeholder="*********"
                   required
                   className="pr-10"
                 />
@@ -210,6 +211,7 @@ export const ResetPassword = () => {
                   type={showConfirmPassword ? "text" : "password"}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="*********"
                   required
                   className="pr-10"
                 />

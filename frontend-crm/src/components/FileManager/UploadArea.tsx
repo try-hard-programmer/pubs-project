@@ -36,7 +36,10 @@ export const UploadArea = ({ onClose, currentFolderId }: UploadAreaProps) => {
   );
   const { user } = useAuth();
 
-  console.log("UploadArea useFiles hook initialized with currentFolderId:", currentFolderId);
+  console.log(
+    "UploadArea useFiles hook initialized with currentFolderId:",
+    currentFolderId
+  );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map((file) => ({
@@ -115,7 +118,12 @@ export const UploadArea = ({ onClose, currentFolderId }: UploadAreaProps) => {
 
     for (const uploadFileItem of pendingFiles) {
       try {
-        console.log("Uploading file:", uploadFileItem.file.name, "to folder:", currentFolderId);
+        console.log(
+          "Uploading file:",
+          uploadFileItem.file.name,
+          "to folder:",
+          currentFolderId
+        );
         setUploadFiles((prev) =>
           prev.map((f) =>
             f.file === uploadFileItem.file
@@ -135,10 +143,16 @@ export const UploadArea = ({ onClose, currentFolderId }: UploadAreaProps) => {
         );
         successCount++;
       } catch (error) {
+        let msg;
+        try {
+          msg = JSON.parse(error.message.replace("Error: ", "")).detail;
+        } catch {
+          msg = error.message;
+        }
         setUploadFiles((prev) =>
           prev.map((f) =>
             f.file === uploadFileItem.file
-              ? { ...f, status: "error", error: error.message }
+              ? { ...f, status: "error", error: msg }
               : f
           )
         );
@@ -202,11 +216,17 @@ export const UploadArea = ({ onClose, currentFolderId }: UploadAreaProps) => {
               }`}
             >
               <input {...getInputProps()} />
-              <div className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ${isDragActive ? 'scale-110' : ''} transition-transform`}>
+              <div
+                className={`w-12 h-12 sm:w-16 sm:h-16 mx-auto mb-3 sm:mb-4 rounded-2xl bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center ${
+                  isDragActive ? "scale-110" : ""
+                } transition-transform`}
+              >
                 <Upload className="w-6 h-6 sm:w-8 sm:h-8 text-primary" />
               </div>
               {isDragActive ? (
-                <p className="text-primary font-semibold text-base sm:text-lg">Drop the files here...</p>
+                <p className="text-primary font-semibold text-base sm:text-lg">
+                  Drop the files here...
+                </p>
               ) : (
                 <div>
                   <p className="text-foreground font-semibold mb-2 text-base sm:text-lg">

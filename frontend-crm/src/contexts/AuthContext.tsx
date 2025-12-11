@@ -53,27 +53,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const isImplicit =
           hash.includes("access_token") && hash.includes("refresh_token");
 
-        // 2. Check for PKCE Flow (Google often uses this now)
+        // 2. Check for PKCE Flow
         const isPKCE = search.includes("code=");
 
         // 3. Check for Email Actions
+        // FIX: Removed "type=recovery" from here so AuthContext doesn't hijack it.
+        // PasswordRecoveryHandler.tsx will handle recovery redirects instead.
         const isEmailAction =
-          hash.includes("type=signup") ||
-          hash.includes("type=email") ||
-          hash.includes("type=recovery");
+          hash.includes("type=signup") || hash.includes("type=email");
+        // REMOVED: || hash.includes("type=recovery");
 
         // logic: If coming back from ANY auth provider, send to /auth to check org status
-        // But only if we aren't already there.
         const isAuthCallback = isImplicit || isPKCE || isEmailAction;
+        const isRecovery = hash.includes("type=recovery");
 
         if (
           isAuthCallback &&
+          !isRecovery && // <--- ADD THIS CHECK
           !pathname.includes("/auth") &&
           !hash.includes("#/auth")
         ) {
           console.log("Redirecting to /auth for organization check");
-          // Use window.location.href to ensure a full redirect if needed,
-          // or hash navigation if using HashRouter exclusively.
           setTimeout(() => {
             window.location.hash = "#/auth";
           }, 100);
@@ -85,6 +85,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+
+      // KEEP THIS: Do not stop loading if we are in recovery mode
+      if (!session && window.location.hash.includes("type=recovery")) {
+        return;
+      }
+
       setLoading(false);
     });
 

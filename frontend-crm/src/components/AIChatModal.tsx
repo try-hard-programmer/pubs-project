@@ -50,6 +50,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { FileItem, useFiles } from "@/hooks/useFiles";
 import { FilePreview } from "./FileManager/FilePreview";
 import { ChatHistoryService, Topic } from "@/lib/chatHistoryService";
+import { ConfirmDeleteChatDialog } from "./ConfirmDeleteChatDialog";
 
 type FileObj = {
   id: string;
@@ -95,31 +96,31 @@ const AGENTS = [
     id: "default",
     name: "Default Agent",
     icon: Sparkles,
-    description: "General purpose AI assistant"
+    description: "General purpose AI assistant",
   },
   {
     id: "tax",
     name: "Tax Consultant",
     icon: CalculatorIcon,
-    description: "Tax and financial advisor"
+    description: "Tax and financial advisor",
   },
   {
     id: "legal",
     name: "Legal Consultant",
     icon: Scale,
-    description: "Legal advice and consultation"
+    description: "Legal advice and consultation",
   },
   {
     id: "finance",
     name: "Finance Consultant",
     icon: Briefcase,
-    description: "Financial planning and advice"
+    description: "Financial planning and advice",
   },
   {
     id: "marketing",
     name: "Marketing & Sales Consultant",
     icon: TrendingUp,
-    description: "Marketing strategy and sales optimization"
+    description: "Marketing strategy and sales optimization",
   },
 ];
 
@@ -149,9 +150,17 @@ export const AIChatModal = ({
   const [isTemporarySession, setIsTemporarySession] = useState(false); // True jika sedang di temporary session (frontend only)
   const [skipNextLoad, setSkipNextLoad] = useState(false); // Flag to skip loading messages after sending
   const activeTopicIdRef = useRef<string | null>(null); // Ref to track active topic without causing re-render
-  const [activeTopicForHighlight, setActiveTopicForHighlight] = useState<string | null>(null); // For sidebar highlight only
+  const [activeTopicForHighlight, setActiveTopicForHighlight] = useState<
+    string | null
+  >(null); // For sidebar highlight only
   const isCreatingTopicRef = useRef<boolean>(false); // Flag to prevent clearing messages during topic creation
-  const [conversationLoading, setConversationLoading] = useState(false)
+  const [conversationLoading, setConversationLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deletingTopicId, setDeletingTopicId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deletingTitle, setDeletingTitle] = useState<string | undefined>(
+    undefined
+  );
 
   // State untuk toggle expanded per message
   const toggleRefsView = (messageId: string) => {
@@ -212,7 +221,9 @@ export const AIChatModal = ({
       // This prevents the race condition where messages get cleared before API response arrives
       // Check this BEFORE any other conditions!
       if (isCreatingTopicRef.current) {
-        console.log("[Load Messages] Topic creation in progress, skipping to preserve messages");
+        console.log(
+          "[Load Messages] Topic creation in progress, skipping to preserve messages"
+        );
         return;
       }
 
@@ -232,7 +243,9 @@ export const AIChatModal = ({
       // Don't load messages if we're creating a new topic (activeTopicIdRef has value but currentTopicId is null)
       // This prevents clearing messages when transitioning from temporary to real topic
       if (!currentTopicId && activeTopicIdRef.current) {
-        console.log("[Load Messages] Topic being created, skipping to prevent clearing messages");
+        console.log(
+          "[Load Messages] Topic being created, skipping to prevent clearing messages"
+        );
         return;
       }
 
@@ -242,21 +255,33 @@ export const AIChatModal = ({
         return;
       }
 
-      console.log("[Load Messages] Loading messages for topic:", currentTopicId);
+      console.log(
+        "[Load Messages] Loading messages for topic:",
+        currentTopicId
+      );
 
       try {
         setIsLoadingMessages(true);
-        const fetchedMessages = await ChatHistoryService.getMessages(currentTopicId);
+        const fetchedMessages = await ChatHistoryService.getMessages(
+          currentTopicId
+        );
 
-        console.log("[Load Messages] Fetched messages:", fetchedMessages.length);
+        console.log(
+          "[Load Messages] Fetched messages:",
+          fetchedMessages.length
+        );
 
         // Convert API messages to UI messages
         const uiMessages: Message[] = fetchedMessages.map((msg) => {
           // Extract reference_documents from API response
-          const referenceDocuments: ReferenceDocument[] = msg.reference_documents || [];
+          const referenceDocuments: ReferenceDocument[] =
+            msg.reference_documents || [];
 
           console.log("[Load Messages] Processing message:", msg.id);
-          console.log("[Load Messages] reference_documents:", referenceDocuments);
+          console.log(
+            "[Load Messages] reference_documents:",
+            referenceDocuments
+          );
 
           return {
             id: msg.id,
@@ -328,7 +353,9 @@ export const AIChatModal = ({
     if (open && !isLoadingTopics) {
       // If no topic selected, start temporary session
       if (!currentTopicId && !isTemporarySession) {
-        console.log("[Modal Open] No topic selected, starting temporary session");
+        console.log(
+          "[Modal Open] No topic selected, starting temporary session"
+        );
         setIsTemporarySession(true);
         setMessages([]);
       }
@@ -410,7 +437,7 @@ export const AIChatModal = ({
       const shouldCreateTopic = isTemporarySession && !topicId;
 
       if (shouldCreateTopic) {
-        setConversationLoading(true)
+        setConversationLoading(true);
         console.log("[First Message] Creating topic with title from query");
         try {
           // Set flag to prevent useEffect from clearing messages
@@ -421,7 +448,8 @@ export const AIChatModal = ({
           setIsTemporarySession(false);
 
           // Generate title from first 25 characters of the question
-          const newTitle = userQuery.slice(0, 25) + (userQuery.length > 25 ? "..." : "");
+          const newTitle =
+            userQuery.slice(0, 25) + (userQuery.length > 25 ? "..." : "");
 
           // Create topic with the generated title
           const newTopic = await ChatHistoryService.createTopic(newTitle);
@@ -457,10 +485,12 @@ export const AIChatModal = ({
         true // save_history = true
       );
 
-      setConversationLoading(false)
+      setConversationLoading(false);
       // Validasi minimal
       const answer = data?.answer ?? "Tidak ada jawaban dari server.";
-      const referenceDocuments: ReferenceDocument[] = Array.isArray(data?.reference_documents)
+      const referenceDocuments: ReferenceDocument[] = Array.isArray(
+        data?.reference_documents
+      )
         ? data.reference_documents
         : [];
       console.log("[Agent Response] reference_documents:", referenceDocuments);
@@ -473,11 +503,16 @@ export const AIChatModal = ({
         timestamp: new Date(),
       };
 
-      console.log("[Agent Response] assistant message created:", assistantMessage);
+      console.log(
+        "[Agent Response] assistant message created:",
+        assistantMessage
+      );
 
       // Add assistant message directly to UI with reference documents from agent response
       // This is more reliable than refetching from API which might have race condition
-      console.log("[Agent Response] Adding assistant message to UI with references");
+      console.log(
+        "[Agent Response] Adding assistant message to UI with references"
+      );
       setMessages((prev) => [...prev, assistantMessage]);
 
       // Only update UI state if this was the first message (topic just created)
@@ -552,6 +587,17 @@ export const AIChatModal = ({
     setPreviewFile(file);
   };
 
+  const handleConfirmDeleteChat = async () => {
+    if (!deletingTopicId) return;
+    try {
+      setDeleting(true);
+      await deleteChat(deletingTopicId); // fungsi yang sudah ada di file
+    } finally {
+      setDeleting(false);
+      setDeletingTopicId(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -567,14 +613,11 @@ export const AIChatModal = ({
               </DialogTitle>
 
               {/* Agent Selector */}
-              <Select
-                value={selectedAgent}
-                onValueChange={setSelectedAgent}
-              >
+              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
                 <SelectTrigger className="w-[220px] h-9 bg-background">
                   <SelectValue>
                     {(() => {
-                      const agent = AGENTS.find(a => a.id === selectedAgent);
+                      const agent = AGENTS.find((a) => a.id === selectedAgent);
                       const Icon = agent?.icon || Sparkles;
                       return (
                         <div className="flex items-center gap-2">
@@ -596,14 +639,27 @@ export const AIChatModal = ({
                         disabled={isDisabled}
                       >
                         <div className="flex items-center gap-2">
-                          <Icon className={`w-4 h-4 ${isDisabled ? 'text-muted-foreground' : 'text-primary'}`} />
+                          <Icon
+                            className={`w-4 h-4 ${
+                              isDisabled
+                                ? "text-muted-foreground"
+                                : "text-primary"
+                            }`}
+                          />
                           <div className="flex flex-col">
                             <div className="flex items-center gap-2">
-                              <span className={`font-medium ${isDisabled ? 'text-muted-foreground' : ''}`}>
+                              <span
+                                className={`font-medium ${
+                                  isDisabled ? "text-muted-foreground" : ""
+                                }`}
+                              >
                                 {agent.name}
                               </span>
                               {isDisabled && (
-                                <Badge variant="secondary" className="text-[10px] px-1 py-0 h-4">
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] px-1 py-0 h-4"
+                                >
                                   Coming Soon
                                 </Badge>
                               )}
@@ -668,16 +724,21 @@ export const AIChatModal = ({
                     </p>
                   </div>
                 ) : (
-                  Array.isArray(topics) && topics.map((topic) => (
+                  Array.isArray(topics) &&
+                  topics.map((topic) => (
                     <div
                       key={topic.id}
                       className={`group relative rounded-lg border transition-all cursor-pointer ${
-                        (currentTopicId === topic.id || activeTopicForHighlight === topic.id)
-                          ? 'bg-primary/10 border-primary/20'
-                          : 'bg-card border-border hover:bg-muted/50'
+                        currentTopicId === topic.id ||
+                        activeTopicForHighlight === topic.id
+                          ? "bg-primary/10 border-primary/20"
+                          : "bg-card border-border hover:bg-muted/50"
                       }`}
                       onClick={() => {
-                        console.log("[Topic Click] Switching to topic:", topic.id);
+                        console.log(
+                          "[Topic Click] Switching to topic:",
+                          topic.id
+                        );
                         setCurrentTopicId(topic.id);
                         activeTopicIdRef.current = topic.id; // Sync ref with state
                         setActiveTopicForHighlight(topic.id); // Update highlight
@@ -702,7 +763,9 @@ export const AIChatModal = ({
                         size="sm"
                         onClick={(e) => {
                           e.stopPropagation();
-                          deleteChat(topic.id);
+                          setDeletingTopicId(topic.id);
+                          setDeletingTitle(topic.title);
+                          setDeleteDialogOpen(true);
                         }}
                         className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
                         title="Delete chat"
@@ -720,290 +783,314 @@ export const AIChatModal = ({
           <div className="flex-1 flex flex-col">
             {/* Chat Messages */}
             <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-          {conversationLoading == true ? <>
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
-              <p className="text-sm text-muted-foreground">Loading conversation...</p>
-            </div>
-          </> : messages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center">
-              <div className="flex items-center justify-center w-16 h-16 mb-4 bg-primary/10 rounded-full">
-                <Bot className="w-8 h-8 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                Selamat datang di AI Agent Chat
-              </h3>
-              <p className="text-muted-foreground text-sm max-w-md">
-                Mulai percakapan dengan mengetik pertanyaan atau query. Chat
-                session akan berakhir ketika modal ditutup.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-6">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex w-full ${
-                    message.role === "user" ? "justify-end" : "justify-start"
-                  }`}
-                >
-                  <div
-                    className={`flex items-start gap-3 max-w-[80%] ${
-                      message.role === "user" ? "flex-row-reverse" : "flex-row"
-                    }`}
-                  >
-                    {message.role === "assistant" ? (
-                      <Avatar className="w-8 h-8 bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-4 h-4 text-primary" />
-                      </Avatar>
-                    ) : (
-                      <Avatar className="w-8 h-8 bg-secondary flex items-center justify-center flex-shrink-0">
-                        <User className="w-4 h-4 text-secondary-foreground" />
-                      </Avatar>
-                    )}
-
+              {conversationLoading == true ? (
+                <>
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+                    <p className="text-sm text-muted-foreground">
+                      Loading conversation...
+                    </p>
+                  </div>
+                </>
+              ) : messages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="flex items-center justify-center w-16 h-16 mb-4 bg-primary/10 rounded-full">
+                    <Bot className="w-8 h-8 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">
+                    Selamat datang di AI Agent Chat
+                  </h3>
+                  <p className="text-muted-foreground text-sm max-w-md">
+                    Mulai percakapan dengan mengetik pertanyaan atau query. Chat
+                    session akan berakhir ketika modal ditutup.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {messages.map((message) => (
                     <div
-                      className={`flex-1 ${
-                        message.role === "user" ? "text-right" : "text-left"
+                      key={message.id}
+                      className={`flex w-full ${
+                        message.role === "user"
+                          ? "justify-end"
+                          : "justify-start"
                       }`}
                     >
-                      <Card
-                        className={`p-3 ${
+                      <div
+                        className={`flex items-start gap-3 max-w-[80%] ${
                           message.role === "user"
-                            ? "bg-primary text-primary-foreground ml-4"
-                            : "bg-muted mr-4"
+                            ? "flex-row-reverse"
+                            : "flex-row"
                         }`}
                       >
-                        {message.images && message.images.length > 0 && (
-                          <div className="grid grid-cols-2 gap-2 mb-3 max-w-md">
-                            {message.images.map((img, idx) => (
-                              <img
-                                key={idx}
-                                src={img}
-                                alt={`Upload ${idx + 1}`}
-                                className="rounded-lg max-h-32 object-cover border border-border"
-                              />
-                            ))}
-                          </div>
+                        {message.role === "assistant" ? (
+                          <Avatar className="w-8 h-8 bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Bot className="w-4 h-4 text-primary" />
+                          </Avatar>
+                        ) : (
+                          <Avatar className="w-8 h-8 bg-secondary flex items-center justify-center flex-shrink-0">
+                            <User className="w-4 h-4 text-secondary-foreground" />
+                          </Avatar>
                         )}
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                          {message.content}
-                        </p>
+
                         <div
-                          className={`text-xs mt-2 opacity-70 ${
-                            message.role === "user"
-                              ? "text-primary-foreground/70"
-                              : "text-muted-foreground"
+                          className={`flex-1 ${
+                            message.role === "user" ? "text-right" : "text-left"
                           }`}
                         >
-                          {message.timestamp.toLocaleTimeString()}
-                        </div>
-                      </Card>
+                          <Card
+                            className={`p-3 ${
+                              message.role === "user"
+                                ? "bg-primary text-primary-foreground ml-4"
+                                : "bg-muted mr-4"
+                            }`}
+                          >
+                            {message.images && message.images.length > 0 && (
+                              <div className="grid grid-cols-2 gap-2 mb-3 max-w-md">
+                                {message.images.map((img, idx) => (
+                                  <img
+                                    key={idx}
+                                    src={img}
+                                    alt={`Upload ${idx + 1}`}
+                                    className="rounded-lg max-h-32 object-cover border border-border"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                              {message.content}
+                            </p>
+                            <div
+                              className={`text-xs mt-2 opacity-70 ${
+                                message.role === "user"
+                                  ? "text-primary-foreground/70"
+                                  : "text-muted-foreground"
+                              }`}
+                            >
+                              {message.timestamp.toLocaleTimeString()}
+                            </div>
+                          </Card>
 
-                      {/* Label Sumber dengan styling yang lebih rapi */}
-                      {message.role === "assistant" &&
-                        Array.isArray(message.reference_documents) &&
-                        message.reference_documents.length > 0 && (
-                          <div className="mt-3 text-left">
-                            <h4 className="text-xs font-medium text-muted-foreground mb-2">
-                              Reference
-                            </h4>
+                          {/* Label Sumber dengan styling yang lebih rapi */}
+                          {message.role === "assistant" &&
+                            Array.isArray(message.reference_documents) &&
+                            message.reference_documents.length > 0 && (
+                              <div className="mt-3 text-left">
+                                <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                                  Reference
+                                </h4>
 
-                            {(() => {
-                              const isExpanded = !!expandedRefs[message.id];
-                              const items = message.reference_documents;
+                                {(() => {
+                                  const isExpanded = !!expandedRefs[message.id];
+                                  const items = message.reference_documents;
 
-                              return (
-                                <div
-                                  className={
-                                    isExpanded
-                                      ? "flex flex-col gap-2"
-                                      : "flex flex-row flex-wrap gap-2"
-                                  }
-                                >
-                                  {items.map((ref, idx) => {
-                                    return (
-                                      <div
-                                        key={idx}
-                                        className="inline-flex items-center"
-                                      >
-                                        <div
-                                          className="group relative inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:border-primary/50 cursor-pointer"
-                                          style={{ width: "12rem" }}
-                                        >
-                                          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                                            📄
-                                          </span>
-                                          <span
-                                            className="truncate text-xs"
-                                            title={ref.filename}
+                                  return (
+                                    <div
+                                      className={
+                                        isExpanded
+                                          ? "flex flex-col gap-2"
+                                          : "flex flex-row flex-wrap gap-2"
+                                      }
+                                    >
+                                      {items.map((ref, idx) => {
+                                        return (
+                                          <div
+                                            key={idx}
+                                            className="inline-flex items-center"
                                           >
-                                            {ref.filename}
-                                          </span>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
+                                            <div
+                                              className="group relative inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:border-primary/50 cursor-pointer"
+                                              style={{ width: "12rem" }}
+                                            >
+                                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                                                📄
+                                              </span>
+                                              <span
+                                                className="truncate text-xs"
+                                                title={ref.filename}
+                                              >
+                                                {ref.filename}
+                                              </span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
 
-                                  {shouldShowMore(items.length, isExpanded) && (
-                                    <Button
-                                      variant="outline"
-                                      className="h-8 px-3 text-xs"
-                                      onClick={() =>
-                                        setExpandedRefs((prev) => ({
-                                          ...prev,
-                                          [message.id]: true,
-                                        }))
-                                      }
-                                      title="Lihat semua"
-                                    >
-                                      ...
-                                    </Button>
-                                  )}
+                                      {shouldShowMore(
+                                        items.length,
+                                        isExpanded
+                                      ) && (
+                                        <Button
+                                          variant="outline"
+                                          className="h-8 px-3 text-xs"
+                                          onClick={() =>
+                                            setExpandedRefs((prev) => ({
+                                              ...prev,
+                                              [message.id]: true,
+                                            }))
+                                          }
+                                          title="Lihat semua"
+                                        >
+                                          ...
+                                        </Button>
+                                      )}
 
-                                  {isExpanded && (
-                                    <Button
-                                      variant="ghost"
-                                      className="h-8 px-3 text-xs self-start"
-                                      onClick={() =>
-                                        setExpandedRefs((prev) => ({
-                                          ...prev,
-                                          [message.id]: false,
-                                        }))
-                                      }
-                                      title="Sembunyikan"
-                                    >
-                                      Sembunyikan
-                                    </Button>
-                                  )}
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        )}
+                                      {isExpanded && (
+                                        <Button
+                                          variant="ghost"
+                                          className="h-8 px-3 text-xs self-start"
+                                          onClick={() =>
+                                            setExpandedRefs((prev) => ({
+                                              ...prev,
+                                              [message.id]: false,
+                                            }))
+                                          }
+                                          title="Sembunyikan"
+                                        >
+                                          Sembunyikan
+                                        </Button>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                            )}
 
-                      {message.role === "assistant" && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 hover:bg-muted"
-                          >
-                            <Copy className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 hover:bg-muted"
-                          >
-                            <ThumbsUp className="w-3 h-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 w-6 p-0 hover:bg-muted"
-                          >
-                            <ThumbsDown className="w-3 h-3" />
-                          </Button>
+                          {message.role === "assistant" && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 hover:bg-muted"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 hover:bg-muted"
+                              >
+                                <ThumbsUp className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 hover:bg-muted"
+                              >
+                                <ThumbsDown className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {isLoading && (
-                <div className="flex justify-start w-full">
-                  <div className="flex items-start gap-3 max-w-[80%]">
-                    <Avatar className="w-8 h-8 bg-primary/10 flex items-center justify-center">
-                      <Bot className="w-4 h-4 text-primary" />
-                    </Avatar>
-                    <Card className="p-3 bg-muted">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground">
-                          AI sedang memproses...
-                        </span>
                       </div>
-                    </Card>
-                  </div>
+                    </div>
+                  ))}
+
+                  {isLoading && (
+                    <div className="flex justify-start w-full">
+                      <div className="flex items-start gap-3 max-w-[80%]">
+                        <Avatar className="w-8 h-8 bg-primary/10 flex items-center justify-center">
+                          <Bot className="w-4 h-4 text-primary" />
+                        </Avatar>
+                        <Card className="p-3 bg-muted">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                            <span className="text-sm text-muted-foreground">
+                              AI sedang memproses...
+                            </span>
+                          </div>
+                        </Card>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
-        </ScrollArea>
+            </ScrollArea>
 
-        {/* Input Area */}
-        <div className="border-t border-border p-4">
-          {/* Image Preview */}
-          {images.length > 0 && (
-            <div className="grid grid-cols-4 gap-2 mb-4">
-              {images.map((img, idx) => (
-                <div key={idx} className="relative group">
-                  <img
-                    src={img}
-                    alt={`Preview ${idx + 1}`}
-                    className="w-full h-16 object-cover rounded-md border border-border"
-                  />
-                  <Button
-                    size="icon"
-                    variant="destructive"
-                    className="absolute -top-2 -right-2 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={() => removeImage(idx)}
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
+            {/* Input Area */}
+            <div className="border-t border-border p-4">
+              {/* Image Preview */}
+              {images.length > 0 && (
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {images.map((img, idx) => (
+                    <div key={idx} className="relative group">
+                      <img
+                        src={img}
+                        alt={`Preview ${idx + 1}`}
+                        className="w-full h-16 object-cover rounded-md border border-border"
+                      />
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="absolute -top-2 -right-2 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => removeImage(idx)}
+                      >
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
+              )}
 
-          <div className="flex items-end gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-              className="h-8 w-8 p-0 hover:bg-muted"
-            >
-              <Paperclip className="w-4 h-4" />
-            </Button>
+              <div className="flex items-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isLoading}
+                  className="h-8 w-8 p-0 hover:bg-muted"
+                >
+                  <Paperclip className="w-4 h-4" />
+                </Button>
 
-            <div className="flex-1 relative">
-              <Textarea
-                ref={textareaRef}
-                placeholder="Ketik query atau pertanyaan..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={handleKeyPress}
-                disabled={isLoading}
-                className="resize-none min-h-10 max-h-32 pr-10 py-2 border-border bg-background text-foreground placeholder:text-muted-foreground"
-                rows={1}
+                <div className="flex-1 relative">
+                  <Textarea
+                    ref={textareaRef}
+                    placeholder="Ketik query atau pertanyaan..."
+                    value={input}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    disabled={isLoading}
+                    className="resize-none min-h-10 max-h-32 pr-10 py-2 border-border bg-background text-foreground placeholder:text-muted-foreground"
+                    rows={1}
+                  />
+                </div>
+
+                <Button
+                  size="sm"
+                  onClick={handleSend}
+                  disabled={isLoading || (!input.trim() && images.length === 0)}
+                  className="h-8 w-8 p-0"
+                >
+                  <Send className="w-4 h-4" />
+                </Button>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                className="hidden"
               />
             </div>
-
-            <Button
-              size="sm"
-              onClick={handleSend}
-              disabled={isLoading || (!input.trim() && images.length === 0)}
-              className="h-8 w-8 p-0"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handleImageUpload}
-            className="hidden"
-          />
-        </div>
           </div>
         </div>
       </DialogContent>
+      <ConfirmDeleteChatDialog
+        open={deleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeletingTopicId(null);
+            setDeletingTitle(undefined);
+          }
+          setDeleteDialogOpen(open);
+        }}
+        onConfirm={handleConfirmDeleteChat}
+        loading={deleting}
+        topicTitle={deletingTitle}
+      />
       <FilePreview
         file={previewFile}
         isOpen={!!previewFile}

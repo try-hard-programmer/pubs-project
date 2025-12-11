@@ -216,10 +216,13 @@ export const CustomerService = ({
   const [agents, setAgents] = useState<Agent[]>([]);
   const [agentsLoading, setAgentsLoading] = useState(true);
 
+  const agentsRef = useRef<Agent[]>([]);
+
   // Chat & Message State
   const [chats, setChats] = useState<Chat[]>([]);
   const chatsRef = useRef<Chat[]>([]);
   const activeChatRef = useRef<string | null>(null);
+  const pendingChatCreations = useRef<Set<string>>(new Set());
 
   // Kanban State
   const [kanbanTickets, setKanbanTickets] = useState<Ticket[]>([]);
@@ -234,6 +237,10 @@ export const CustomerService = ({
     activeChatRef.current = activeChat;
   }, [activeChat]);
 
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
+
   const [chatsLoading, setChatsLoading] = useState(true);
   const [customersMap, setCustomersMap] = useState<Map<string, Customer>>(
     new Map()
@@ -241,7 +248,76 @@ export const CustomerService = ({
   const [currentChatMessages, setCurrentChatMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
 
-  // ==========================================================================
+  const fetchAndAddTicket = useCallback(
+    async (ticketId: string, chatId: string) => {
+      try {
+        // Avoid refetching if we already have it
+        const currentChat = chatsRef.current.find((c) => c.id === chatId);
+        if (
+          currentChat &&
+          currentChat.tickets?.some((t) => t.id === ticketId)
+        ) {
+          return;
+        }
+
+        const apiTicket = await crmChatsService.getTicket(ticketId);
+
+        let agentName = undefined;
+        if (apiTicket.assigned_agent?.name) {
+          agentName = apiTicket.assigned_agent.name;
+        } else if (apiTicket.assigned_agent_id) {
+          const foundAgent = agentsRef.current.find(
+            (a) => a.id === apiTicket.assigned_agent_id
+          );
+          agentName = foundAgent?.name;
+        }
+
+        const newTicket: Ticket = {
+          id: apiTicket.id,
+          ticketNumber: apiTicket.ticket_number,
+          title: apiTicket.title,
+          description: apiTicket.description || "",
+          category: apiTicket.category || "Uncategorized",
+          priority: apiTicket.priority,
+          status: apiTicket.status,
+          createdAt: new Date(apiTicket.created_at).toLocaleString(),
+          updatedAt: new Date(apiTicket.updated_at).toLocaleString(),
+          resolvedAt: apiTicket.resolved_at
+            ? new Date(apiTicket.resolved_at).toLocaleString()
+            : undefined,
+          closedAt: apiTicket.closed_at
+            ? new Date(apiTicket.closed_at).toLocaleString()
+            : undefined,
+          assignedTo: agentName,
+          tags: apiTicket.tags,
+          relatedMessages: [],
+          chatId: chatId,
+          customerName: currentChat?.customerName || "Unknown",
+        };
+
+        setChats((prevChats) =>
+          prevChats.map((chat) => {
+            if (chat.id === chatId) {
+              // Double check to prevent duplicates
+              if (chat.tickets?.some((t) => t.id === ticketId)) return chat;
+              return {
+                ...chat,
+                tickets: [newTicket, ...(chat.tickets || [])],
+              };
+            }
+            return chat;
+          })
+        );
+
+        toast.info(`New ticket created: ${newTicket.ticketNumber}`);
+      } catch (error) {
+        console.error("Error fetching automatically created ticket:", error);
+      }
+    },
+    []
+  );
+
+  // =============================  =============================================
   // API INTEGRATION - DATA FETCHING HOOKS
   // ==========================================================================
 
@@ -591,27 +667,63 @@ export const CustomerService = ({
   const handleNewMessageNotification = useCallback(
     async (notification: WebSocketNewMessage) => {
       const { data } = notification;
-      const payload = data as any;
-      const { chat_id, message_id, message_content } = data;
+      const { chat_id, message_id, message_content, ticket_id } = data;
 
+      console.log("📩 WebSocket Message Received:", data);
+
+      const payload = data as any;
       const senderType = payload.sender_type;
       const senderName = payload.sender_name;
 
+      // Check existence in CURRENT state (Ref)
       const chatExists = chatsRef.current.some((c) => c.id === chat_id);
 
-      // 1. New Chat Logic
+      // === 1. TICKET LOGIC ===
+      if (ticket_id) {
+        fetchAndAddTicket(ticket_id, chat_id);
+      }
+
+      // === 2. SENDER LOGIC ===
+      let finalSender: "customer" | "agent" | "ai" = "customer";
+      const rawType = String(senderType || "").toLowerCase();
+
+      if (rawType === "agent" || rawType === "human" || rawType === "admin") {
+        finalSender = "agent";
+      } else if (
+        rawType === "ai" ||
+        rawType === "bot" ||
+        rawType === "system"
+      ) {
+        finalSender = "ai";
+      } else {
+        finalSender = "customer";
+      }
+
+      // === 3. NEW CHAT LOGIC (With Race Condition Fix) ===
       if (!chatExists) {
+        // FIX: Check if we are already handling this new chat
+        if (pendingChatCreations.current.has(chat_id)) {
+          console.log(
+            "⏳ Chat creation already in progress, skipping duplicate event:",
+            chat_id
+          );
+          return;
+        }
+
         console.log("🆕 New chat detected via WebSocket:", chat_id);
+
+        // Mark as pending
+        pendingChatCreations.current.add(chat_id);
+
         try {
           const newChatData = await crmChatsService.getChat(chat_id);
 
+          // ... (Your existing mapping logic) ...
           const newChat: Chat = {
             id: newChatData.id,
             customerId: newChatData.customer_id,
             customerName:
-              newChatData.customer_name ||
-              data.customer_name ||
-              "Unknown Customer",
+              newChatData.customer_name || data.customer_name || "Unknown",
             lastMessage: newChatData.last_message?.content || message_content,
             timestamp: new Date().toLocaleTimeString([], {
               hour: "2-digit",
@@ -639,7 +751,11 @@ export const CustomerService = ({
             tickets: [],
           };
 
-          setChats((prev) => [newChat, ...prev]);
+          setChats((prev) => {
+            // Double-safety check inside updater
+            if (prev.some((c) => c.id === newChat.id)) return prev;
+            return [newChat, ...prev];
+          });
 
           playNotificationSound("message", 0.5);
           toast.info(`New chat from ${newChat.customerName}`, {
@@ -651,11 +767,14 @@ export const CustomerService = ({
           });
         } catch (error) {
           console.error("Failed to fetch new chat details:", error);
+        } finally {
+          // Release the lock
+          pendingChatCreations.current.delete(chat_id);
         }
         return;
       }
 
-      // 2. Existing Chat Update Logic
+      // === 4. EXISTING CHAT UPDATE LOGIC ===
       setChats((prevChats) => {
         const chatIndex = prevChats.findIndex((chat) => chat.id === chat_id);
         if (chatIndex === -1) return prevChats;
@@ -678,22 +797,11 @@ export const CustomerService = ({
 
         const [updatedChat] = updatedChats.splice(chatIndex, 1);
         updatedChats.unshift(updatedChat);
-
         return updatedChats;
       });
 
-      // 3. Append to Active View
+      // === 5. APPEND MESSAGE TO ACTIVE VIEW ===
       if (chat_id === activeChatRef.current) {
-        let finalSender: "customer" | "agent" | "ai" = "customer";
-
-        if (senderType === "agent" || senderType === "human") {
-          finalSender = "agent";
-        } else if (senderType === "ai") {
-          finalSender = "ai";
-        } else {
-          finalSender = "customer";
-        }
-
         const transformedMessage: Message = {
           id: message_id,
           sender: finalSender,
@@ -703,29 +811,19 @@ export const CustomerService = ({
             hour: "2-digit",
             minute: "2-digit",
           }),
+          ticketId: ticket_id || undefined,
         };
 
         setCurrentChatMessages((prev) => {
-          if (prev.some((msg) => msg.id === message_id)) {
-            return prev;
-          }
+          if (prev.some((msg) => msg.id === message_id)) return prev;
           return [...prev, transformedMessage];
         });
       } else {
+        // Only play sound if not active chat (moved here to avoid duplicate sound on new chat creation)
         playNotificationSound("message", 0.5);
-        const chat = chatsRef.current.find((c) => c.id === chat_id);
-        if (chat) {
-          toast.info(`New message from ${chat.customerName}`, {
-            action: {
-              label: "View",
-              onClick: () => setActiveChat(chat_id),
-            },
-            duration: 5000,
-          });
-        }
       }
     },
-    []
+    [fetchAndAddTicket]
   );
 
   const handleChatUpdateNotification = useCallback(
@@ -734,6 +832,23 @@ export const CustomerService = ({
       const { chat_id } = data;
 
       console.log("🔄 Chat update received:", update_type, data);
+
+      // === NEW: Handle Ticket Creation Event ===
+      if (update_type === "ticket_created" && data.ticket_id) {
+        console.log(
+          "🎫 WebSocket triggered ticket creation:",
+          data.ticket_number
+        );
+        // This helper (which we added previously) fetches the full ticket
+        // and adds it to the chat's ticket list instantly.
+        fetchAndAddTicket(data.ticket_id, chat_id);
+
+        // Optional: Show a toast so the agent notices
+        toast.info(
+          `New Ticket Auto-Created: ${data.ticket_number || "Ticket"}`
+        );
+      }
+      // =========================================
 
       setChats((prevChats) =>
         prevChats.map((chat) => {
@@ -774,7 +889,7 @@ export const CustomerService = ({
         }
       }
     },
-    []
+    [fetchAndAddTicket] // Ensure this dependency is present!
   );
 
   const handleWebSocketMessage = useCallback(
@@ -873,6 +988,10 @@ export const CustomerService = ({
         undefined,
         metadata
       );
+
+      if (sentMessage.ticket_id) {
+        fetchAndAddTicket(sentMessage.ticket_id, activeChat);
+      }
 
       const transformedMessage: Message = {
         id: sentMessage.id,

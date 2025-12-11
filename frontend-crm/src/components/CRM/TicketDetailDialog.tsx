@@ -35,6 +35,7 @@ import {
   Loader2,
 } from "lucide-react";
 import * as crmChatsService from "@/services/crmChatsService";
+import { Input } from "@/components/ui/input";
 
 interface Ticket {
   id: string;
@@ -171,6 +172,7 @@ export const TicketDetailDialog = ({
       priority: editedTicket.priority,
       assignedTo: editedTicket.assignedTo,
       description: editedTicket.description,
+      category: editedTicket.category,
     });
     setIsEditing(false);
   };
@@ -312,13 +314,30 @@ export const TicketDetailDialog = ({
 
               {/* Category & Assigned To */}
               <div className="grid grid-cols-2 gap-4">
+                {/* Category Card */}
                 <Card>
                   <CardContent className="p-4 space-y-2">
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Tag className="h-4 w-4" />
                       <Label className="text-sm">Category</Label>
                     </div>
-                    <Badge variant="secondary">{ticket.category}</Badge>
+
+                    {/* CONDITIONAL RENDERING FIX */}
+                    {isEditing ? (
+                      <Input
+                        value={editedTicket.category || ""}
+                        onChange={(e) =>
+                          setEditedTicket({
+                            ...editedTicket,
+                            category: e.target.value,
+                          })
+                        }
+                        className="h-8 text-sm"
+                        placeholder="Enter category"
+                      />
+                    ) : (
+                      <Badge variant="secondary">{ticket.category}</Badge>
+                    )}
                   </CardContent>
                 </Card>
 

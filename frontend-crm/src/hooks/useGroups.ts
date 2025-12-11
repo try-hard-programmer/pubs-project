@@ -1,8 +1,8 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
-export type PermissionType = 'view' | 'edit' | 'delete' | 'full';
+export type PermissionType = "view" | "edit" | "delete" | "full";
 
 export interface Group {
   id: string;
@@ -44,14 +44,15 @@ export const useGroups = () => {
     isLoading: isLoadingGroups,
     error: groupsError,
   } = useQuery({
-    queryKey: ['groups', user?.id],
+    queryKey: ["groups", user?.id],
     queryFn: async () => {
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
-        .from('groups')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from("groups")
+        .select("*")
+        .eq("created_by", user.id)
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as Group[];
@@ -62,14 +63,14 @@ export const useGroups = () => {
   // Fetch group members by group ID
   const fetchGroupMembers = async (groupId: string) => {
     const { data: members, error: membersError } = await supabase
-      .from('group_members')
-      .select('*')
-      .eq('group_id', groupId);
+      .from("group_members")
+      .select("*")
+      .eq("group_id", groupId);
 
     if (membersError) throw membersError;
 
     // Get user IDs
-    const userIds = members?.map(m => m.user_id) || [];
+    const userIds = members?.map((m) => m.user_id) || [];
 
     if (userIds.length === 0) {
       return [];
@@ -77,47 +78,48 @@ export const useGroups = () => {
 
     // Get user roles
     const { data: roles, error: rolesError } = await supabase
-      .from('user_roles')
-      .select('user_id, role')
-      .in('user_id', userIds);
+      .from("user_roles")
+      .select("user_id, role")
+      .in("user_id", userIds);
 
     if (rolesError) throw rolesError;
 
     // Get emails from invitations (accepted ones)
     const { data: invitations, error: invError } = await supabase
-      .from('user_invitations')
-      .select('invited_email')
-      .eq('status', 'accepted')
-      .in('invited_email', []); // We'll need to match by user_id through hierarchy
+      .from("user_invitations")
+      .select("invited_email")
+      .eq("status", "accepted")
+      .in("invited_email", []); // We'll need to match by user_id through hierarchy
 
     // Get emails from user_hierarchy
     const { data: hierarchy, error: hierarchyError } = await supabase
-      .from('user_hierarchy')
-      .select('child_user_id')
-      .in('child_user_id', userIds);
+      .from("user_hierarchy")
+      .select("child_user_id")
+      .in("child_user_id", userIds);
 
     if (hierarchyError) throw hierarchyError;
 
     // For now, we'll use accepted invitations to get emails
     const { data: acceptedInvitations, error: acceptedError } = await supabase
-      .from('user_invitations')
-      .select('invited_email, accepted_at')
-      .eq('status', 'accepted');
+      .from("user_invitations")
+      .select("invited_email, accepted_at")
+      .eq("status", "accepted");
 
     if (acceptedError) throw acceptedError;
 
     // Map roles
     const rolesMap: Record<string, string> = {};
-    roles?.forEach(r => {
+    roles?.forEach((r) => {
       rolesMap[r.user_id] = r.role;
     });
 
     // Combine data
-    const enrichedMembers: GroupMember[] = members?.map(m => ({
-      ...m,
-      user_role: rolesMap[m.user_id] || 'user',
-      user_email: 'user@example.com', // We'll get this from another source
-    })) || [];
+    const enrichedMembers: GroupMember[] =
+      members?.map((m) => ({
+        ...m,
+        user_role: rolesMap[m.user_id] || "user",
+        user_email: "user@example.com", // We'll get this from another source
+      })) || [];
 
     return enrichedMembers;
   };
@@ -125,14 +127,14 @@ export const useGroups = () => {
   // Fetch group permissions by group ID
   const fetchGroupPermissions = async (groupId: string) => {
     const { data: permissions, error: permError } = await supabase
-      .from('group_permissions')
-      .select('*')
-      .eq('group_id', groupId);
+      .from("group_permissions")
+      .select("*")
+      .eq("group_id", groupId);
 
     if (permError) throw permError;
 
     // Get file IDs
-    const fileIds = permissions?.map(p => p.file_id) || [];
+    const fileIds = permissions?.map((p) => p.file_id) || [];
 
     if (fileIds.length === 0) {
       return [];
@@ -140,34 +142,41 @@ export const useGroups = () => {
 
     // Get file details
     const { data: files, error: filesError } = await supabase
-      .from('files')
-      .select('id, name')
-      .in('id', fileIds);
+      .from("files")
+      .select("id, name")
+      .in("id", fileIds);
 
     if (filesError) throw filesError;
 
     // Map file names
     const filesMap: Record<string, string> = {};
-    files?.forEach(f => {
+    files?.forEach((f) => {
       filesMap[f.id] = f.name;
     });
 
     // Combine data
-    const enrichedPermissions: GroupPermission[] = permissions?.map(p => ({
-      ...p,
-      file_name: filesMap[p.file_id] || 'Unknown File',
-    })) || [];
+    const enrichedPermissions: GroupPermission[] =
+      permissions?.map((p) => ({
+        ...p,
+        file_name: filesMap[p.file_id] || "Unknown File",
+      })) || [];
 
     return enrichedPermissions;
   };
 
   // Create group
   const createGroupMutation = useMutation({
-    mutationFn: async ({ name, description }: { name: string; description?: string }) => {
-      if (!user) throw new Error('Not authenticated');
+    mutationFn: async ({
+      name,
+      description,
+    }: {
+      name: string;
+      description?: string;
+    }) => {
+      if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
-        .from('groups')
+        .from("groups")
         .insert({
           name,
           description: description || null,
@@ -180,7 +189,7 @@ export const useGroups = () => {
       return data as Group;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 
@@ -189,20 +198,20 @@ export const useGroups = () => {
     mutationFn: async ({
       groupId,
       name,
-      description
+      description,
     }: {
       groupId: string;
       name: string;
-      description?: string
+      description?: string;
     }) => {
       const { data, error } = await supabase
-        .from('groups')
+        .from("groups")
         .update({
           name,
           description: description || null,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', groupId)
+        .eq("id", groupId)
         .select()
         .single();
 
@@ -210,7 +219,7 @@ export const useGroups = () => {
       return data as Group;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 
@@ -218,24 +227,30 @@ export const useGroups = () => {
   const deleteGroupMutation = useMutation({
     mutationFn: async (groupId: string) => {
       const { error } = await supabase
-        .from('groups')
+        .from("groups")
         .delete()
-        .eq('id', groupId);
+        .eq("id", groupId);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 
   // Add member to group
   const addGroupMemberMutation = useMutation({
-    mutationFn: async ({ groupId, userId }: { groupId: string; userId: string }) => {
-      if (!user) throw new Error('Not authenticated');
+    mutationFn: async ({
+      groupId,
+      userId,
+    }: {
+      groupId: string;
+      userId: string;
+    }) => {
+      if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase
-        .from('group_members')
+        .from("group_members")
         .insert({
           group_id: groupId,
           user_id: userId,
@@ -248,23 +263,29 @@ export const useGroups = () => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 
   // Remove member from group
   const removeGroupMemberMutation = useMutation({
-    mutationFn: async ({ groupId, userId }: { groupId: string; userId: string }) => {
+    mutationFn: async ({
+      groupId,
+      userId,
+    }: {
+      groupId: string;
+      userId: string;
+    }) => {
       const { error } = await supabase
-        .from('group_members')
+        .from("group_members")
         .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', userId);
+        .eq("group_id", groupId)
+        .eq("user_id", userId);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 
@@ -279,14 +300,14 @@ export const useGroups = () => {
       fileId: string;
       permission: PermissionType;
     }) => {
-      if (!user) throw new Error('Not authenticated');
+      if (!user) throw new Error("Not authenticated");
 
       // Check if permission already exists
       const { data: existing, error: checkError } = await supabase
-        .from('group_permissions')
-        .select('id')
-        .eq('group_id', groupId)
-        .eq('file_id', fileId)
+        .from("group_permissions")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("file_id", fileId)
         .maybeSingle();
 
       if (checkError) throw checkError;
@@ -294,12 +315,12 @@ export const useGroups = () => {
       if (existing) {
         // Update existing permission
         const { data, error } = await supabase
-          .from('group_permissions')
+          .from("group_permissions")
           .update({
             permission,
             updated_at: new Date().toISOString(),
           })
-          .eq('id', existing.id)
+          .eq("id", existing.id)
           .select()
           .single();
 
@@ -308,7 +329,7 @@ export const useGroups = () => {
       } else {
         // Create new permission
         const { data, error } = await supabase
-          .from('group_permissions')
+          .from("group_permissions")
           .insert({
             group_id: groupId,
             file_id: fileId,
@@ -323,23 +344,29 @@ export const useGroups = () => {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 
   // Remove group permission
   const removeGroupPermissionMutation = useMutation({
-    mutationFn: async ({ groupId, fileId }: { groupId: string; fileId: string }) => {
+    mutationFn: async ({
+      groupId,
+      fileId,
+    }: {
+      groupId: string;
+      fileId: string;
+    }) => {
       const { error } = await supabase
-        .from('group_permissions')
+        .from("group_permissions")
         .delete()
-        .eq('group_id', groupId)
-        .eq('file_id', fileId);
+        .eq("group_id", groupId)
+        .eq("file_id", fileId);
 
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['groups', user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["groups", user?.id] });
     },
   });
 

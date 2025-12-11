@@ -1,8 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
-import { useAuth } from './AuthContext';
-import { useOrganization } from './OrganizationContext';
-import { env } from '@/config/env';
-import { useDebugState, logContextAction } from '@/lib/debuggableContext';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  ReactNode,
+} from "react";
+import { useAuth } from "./AuthContext";
+import { useOrganization } from "./OrganizationContext";
+import { env } from "@/config/env";
+import { useDebugState, logContextAction } from "@/lib/debuggableContext";
 
 /**
  * WebSocket Context
@@ -13,10 +21,10 @@ import { useDebugState, logContextAction } from '@/lib/debuggableContext';
 // TYPES
 // ============================================================================
 
-export type WebSocketStatus = 'connected' | 'disconnected' | 'reconnecting';
+export type WebSocketStatus = "connected" | "disconnected" | "reconnecting";
 
 export interface WebSocketMessage {
-  type: 'connection_established' | 'new_message' | 'chat_update';
+  type: "connection_established" | "new_message" | "chat_update";
   timestamp: string;
   data?: any;
 }
@@ -25,7 +33,7 @@ export interface WebSocketMessage {
  * Connection established notification
  */
 export interface WebSocketConnectionEstablished extends WebSocketMessage {
-  type: 'connection_established';
+  type: "connection_established";
   message: string;
   connection_count: number;
 }
@@ -34,18 +42,25 @@ export interface WebSocketConnectionEstablished extends WebSocketMessage {
  * New message notification from WebSocket
  */
 export interface WebSocketNewMessage extends WebSocketMessage {
-  type: 'new_message';
+  type: "new_message";
   data: {
     chat_id: string;
     message_id: string;
     customer_id: string;
     customer_name: string;
     message_content: string;
-    channel: 'whatsapp' | 'telegram' | 'email' | 'web' | 'facebook' | 'instagram';
-    handled_by: 'ai' | 'human' | 'unassigned';
+    channel:
+      | "whatsapp"
+      | "telegram"
+      | "email"
+      | "web"
+      | "facebook"
+      | "instagram";
+    handled_by: "ai" | "human" | "unassigned";
     is_new_chat: boolean;
     was_reopened: boolean;
-    assigned_agent_id?: string; // Add this for filtering
+    assigned_agent_id?: string;
+    ticket_id?: string; // <--- ADD THIS LINE
   };
 }
 
@@ -53,15 +68,24 @@ export interface WebSocketNewMessage extends WebSocketMessage {
  * Chat update notification (assignment, escalation, status change)
  */
 export interface WebSocketChatUpdate extends WebSocketMessage {
-  type: 'chat_update';
-  update_type?: 'assigned' | 'escalated' | 'status_changed' | 'resolved';
+  type: "chat_update";
+  update_type?:
+    | "assigned"
+    | "escalated"
+    | "status_changed"
+    | "resolved"
+    | "ticket_created";
   data: {
     chat_id: string;
     from_agent?: string;
     to_agent?: string;
     reason?: string;
-    status?: 'open' | 'pending' | 'assigned' | 'resolved' | 'closed';
-    assigned_agent_id?: string; // Add this for filtering
+    status?: "open" | "pending" | "assigned" | "resolved" | "closed";
+    assigned_agent_id?: string;
+    // Added specific fields for ticket creation
+    ticket_id?: string;
+    ticket_number?: string;
+    priority?: string;
     [key: string]: any;
   };
 }
@@ -100,12 +124,14 @@ interface WebSocketContextType {
 // CONTEXT
 // ============================================================================
 
-const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined);
+const WebSocketContext = createContext<WebSocketContextType | undefined>(
+  undefined
+);
 
 export const useWebSocket = () => {
   const context = useContext(WebSocketContext);
   if (context === undefined) {
-    throw new Error('useWebSocket must be used within WebSocketProvider');
+    throw new Error("useWebSocket must be used within WebSocketProvider");
   }
   return context;
 };
@@ -118,7 +144,9 @@ interface WebSocketProviderProps {
 // PROVIDER
 // ============================================================================
 
-export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
+export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
+  children,
+}) => {
   const { user, session } = useAuth();
   const { currentOrganization } = useOrganization();
 
@@ -128,9 +156,21 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
   // WebSocket connection state with debugging
   const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
-  const [wsStatus, setWsStatus] = useDebugState<WebSocketStatus>('WebSocket', 'status', 'disconnected');
-  const [wsReconnectAttempts, setWsReconnectAttempts] = useDebugState<number>('WebSocket', 'reconnectAttempts', 0);
-  const [unreadChatsCount, setUnreadChatsCount] = useDebugState<number>('WebSocket', 'unreadCount', 0);
+  const [wsStatus, setWsStatus] = useDebugState<WebSocketStatus>(
+    "WebSocket",
+    "status",
+    "disconnected"
+  );
+  const [wsReconnectAttempts, setWsReconnectAttempts] = useDebugState<number>(
+    "WebSocket",
+    "reconnectAttempts",
+    0
+  );
+  const [unreadChatsCount, setUnreadChatsCount] = useDebugState<number>(
+    "WebSocket",
+    "unreadCount",
+    0
+  );
   const [reconnectTrigger, setReconnectTrigger] = useState(0); // Trigger for reconnection (internal only)
 
   // Refs for managing subscriptions and reconnection
@@ -148,33 +188,46 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
    * Subscribe to WebSocket messages
    * Returns unsubscribe function
    */
-  const subscribeToMessages = useCallback((callback: MessageCallback): UnsubscribeFunction => {
-    console.log('📡 New subscriber added to WebSocket messages');
-    subscribersRef.current.add(callback);
-    logContextAction('WebSocket', 'SUBSCRIBER_ADDED', { count: subscribersRef.current.size });
+  const subscribeToMessages = useCallback(
+    (callback: MessageCallback): UnsubscribeFunction => {
+      console.log("📡 New subscriber added to WebSocket messages");
+      subscribersRef.current.add(callback);
+      logContextAction("WebSocket", "SUBSCRIBER_ADDED", {
+        count: subscribersRef.current.size,
+      });
 
-    // Return unsubscribe function
-    return () => {
-      console.log('📡 Subscriber removed from WebSocket messages');
-      subscribersRef.current.delete(callback);
-      logContextAction('WebSocket', 'SUBSCRIBER_REMOVED', { count: subscribersRef.current.size });
-    };
-  }, []);
+      // Return unsubscribe function
+      return () => {
+        console.log("📡 Subscriber removed from WebSocket messages");
+        subscribersRef.current.delete(callback);
+        logContextAction("WebSocket", "SUBSCRIBER_REMOVED", {
+          count: subscribersRef.current.size,
+        });
+      };
+    },
+    []
+  );
 
   /**
    * Broadcast message to all subscribers
    */
-  const broadcastMessage = useCallback((notification: WebSocketNotification) => {
-    console.log(`📢 Broadcasting message to ${subscribersRef.current.size} subscriber(s):`, notification.type);
+  const broadcastMessage = useCallback(
+    (notification: WebSocketNotification) => {
+      console.log(
+        `📢 Broadcasting message to ${subscribersRef.current.size} subscriber(s):`,
+        notification.type
+      );
 
-    subscribersRef.current.forEach((callback) => {
-      try {
-        callback(notification);
-      } catch (error) {
-        console.error('❌ Error in subscriber callback:', error);
-      }
-    });
-  }, []);
+      subscribersRef.current.forEach((callback) => {
+        try {
+          callback(notification);
+        } catch (error) {
+          console.error("❌ Error in subscriber callback:", error);
+        }
+      });
+    },
+    []
+  );
 
   // ============================================================================
   // MESSAGE DEDUPLICATION
@@ -227,7 +280,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
    * Manual reconnect trigger
    */
   const reconnect = useCallback(() => {
-    console.log('🔄 Manual reconnect triggered');
+    console.log("🔄 Manual reconnect triggered");
     wsReconnectAttemptsRef.current += 1;
     setWsReconnectAttempts(wsReconnectAttemptsRef.current);
     setReconnectTrigger((prev) => prev + 1);
@@ -242,42 +295,48 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
     // Wait for authentication and organization
     if (!user || !accessToken || !organizationId) {
-      console.log('⏸️ WebSocket: Waiting for authentication and organization...', {
-        hasUser: !!user,
-        hasToken: !!accessToken,
-        hasOrgId: !!organizationId
-      });
-      setWsStatus('disconnected');
+      console.log(
+        "⏸️ WebSocket: Waiting for authentication and organization...",
+        {
+          hasUser: !!user,
+          hasToken: !!accessToken,
+          hasOrgId: !!organizationId,
+        }
+      );
+      setWsStatus("disconnected");
       return;
     }
 
-    console.log('🔌 Initializing WebSocket connection...', {
+    console.log("🔌 Initializing WebSocket connection...", {
       organizationId,
-      attempt: wsReconnectAttemptsRef.current + 1
+      attempt: wsReconnectAttemptsRef.current + 1,
     });
 
-    setWsStatus('reconnecting');
+    setWsStatus("reconnecting");
 
     try {
       // Construct WebSocket URL
       const wsUrl = env.agentApiUrl
-        .replace('https://', 'wss://')
-        .replace('http://', 'ws://');
+        .replace("https://", "wss://")
+        .replace("http://", "ws://");
       const token = accessToken;
       const wsEndpoint = `${wsUrl}/ws/${organizationId}?token=${token}`;
 
-      console.log('🔌 Connecting to WebSocket:', wsEndpoint.replace(/token=[^&]+/, 'token=***'));
+      console.log(
+        "🔌 Connecting to WebSocket:",
+        wsEndpoint.replace(/token=[^&]+/, "token=***")
+      );
 
       const ws = new WebSocket(wsEndpoint);
 
       // Connection opened
       ws.onopen = () => {
-        console.log('✅ WebSocket connected');
-        setWsStatus('connected');
+        console.log("✅ WebSocket connected");
+        setWsStatus("connected");
         wsReconnectAttemptsRef.current = 0; // Reset internal counter
         setWsReconnectAttempts(0); // Reset display counter
         setWsConnection(ws);
-        logContextAction('WebSocket', 'CONNECTION_OPENED', { organizationId });
+        logContextAction("WebSocket", "CONNECTION_OPENED", { organizationId });
       };
 
       // Receive messages
@@ -290,11 +349,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
             return;
           }
 
-          console.log('📨 WebSocket message received:', notification.type);
+          console.log("📨 WebSocket message received:", notification.type);
 
           // Handle connection_established separately (no deduplication needed)
-          if (notification.type === 'connection_established') {
-            console.log('✅ WebSocket connection established:', notification.message);
+          if (notification.type === "connection_established") {
+            console.log(
+              "✅ WebSocket connection established:",
+              notification.message
+            );
             broadcastMessage(notification);
             return;
           }
@@ -302,16 +364,16 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
           // Deduplication for other message types
           let messageId: string | undefined;
 
-          if (notification.type === 'new_message') {
+          if (notification.type === "new_message") {
             messageId = notification.data.message_id;
-          } else if (notification.type === 'chat_update') {
+          } else if (notification.type === "chat_update") {
             // Create unique ID for chat updates
             messageId = `${notification.type}_${notification.data.chat_id}_${notification.timestamp}`;
           }
 
           if (messageId) {
             if (isMessageProcessed(messageId)) {
-              console.log('⏭️ Skipping duplicate message:', messageId);
+              console.log("⏭️ Skipping duplicate message:", messageId);
               return;
             }
             markMessageProcessed(messageId);
@@ -319,33 +381,37 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
           // Broadcast to all subscribers
           broadcastMessage(notification);
-          logContextAction('WebSocket', 'MESSAGE_RECEIVED', {
+          logContextAction("WebSocket", "MESSAGE_RECEIVED", {
             type: notification.type,
-            subscriberCount: subscribersRef.current.size
+            subscriberCount: subscribersRef.current.size,
           });
-
         } catch (error) {
-          console.error('❌ Failed to parse WebSocket message:', error);
+          console.error("❌ Failed to parse WebSocket message:", error);
         }
       };
 
       // Connection error
       ws.onerror = (error) => {
-        console.error('❌ WebSocket error:', error);
-        setWsStatus('disconnected');
+        console.error("❌ WebSocket error:", error);
+        setWsStatus("disconnected");
       };
 
       // Connection closed
       ws.onclose = (event) => {
-        console.log('🔌 WebSocket disconnected:', event.code, event.reason);
-        setWsStatus('disconnected');
+        console.log("🔌 WebSocket disconnected:", event.code, event.reason);
+        setWsStatus("disconnected");
         setWsConnection(null);
-        logContextAction('WebSocket', 'CONNECTION_CLOSED', { code: event.code, reason: event.reason });
+        logContextAction("WebSocket", "CONNECTION_CLOSED", {
+          code: event.code,
+          reason: event.reason,
+        });
 
         // Don't reconnect if this was an intentional cleanup
         if (isCleaningUpRef.current) {
-          console.log('⏸️ WebSocket: Cleanup in progress, skipping auto-reconnect');
-          logContextAction('WebSocket', 'CLEANUP_SKIP_RECONNECT', null);
+          console.log(
+            "⏸️ WebSocket: Cleanup in progress, skipping auto-reconnect"
+          );
+          logContextAction("WebSocket", "CLEANUP_SKIP_RECONNECT", null);
           return;
         }
 
@@ -356,13 +422,19 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
           // Check max reconnection limit
           if (currentAttempt >= MAX_RECONNECT_ATTEMPTS) {
-            console.error('❌ Maximum reconnection attempts reached. Please refresh the page or check your connection.');
-            setWsStatus('disconnected');
+            console.error(
+              "❌ Maximum reconnection attempts reached. Please refresh the page or check your connection."
+            );
+            setWsStatus("disconnected");
             return;
           }
 
           const delay = Math.min(1000 * Math.pow(2, currentAttempt), 30000);
-          console.log(`🔄 Will attempt reconnect in ${delay / 1000}s (attempt ${currentAttempt + 1})`);
+          console.log(
+            `🔄 Will attempt reconnect in ${delay / 1000}s (attempt ${
+              currentAttempt + 1
+            })`
+          );
 
           wsReconnectTimeoutRef.current = setTimeout(() => {
             // Double-check cleanup flag before triggering reconnect
@@ -371,11 +443,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
               setWsReconnectAttempts(wsReconnectAttemptsRef.current); // Update display
               setReconnectTrigger((prev) => prev + 1); // Trigger reconnection
             } else {
-              console.log('⏸️ WebSocket: Cleanup detected in timeout, aborting reconnect');
+              console.log(
+                "⏸️ WebSocket: Cleanup detected in timeout, aborting reconnect"
+              );
             }
           }, delay);
         } else {
-          console.log('⏸️ WebSocket: Not reconnecting (user logged out or missing credentials)');
+          console.log(
+            "⏸️ WebSocket: Not reconnecting (user logged out or missing credentials)"
+          );
         }
       };
 
@@ -403,10 +479,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       // };
 
       // return () => {}
-
     } catch (error) {
-      console.error('❌ Failed to initialize WebSocket:', error);
-      setWsStatus('disconnected');
+      console.error("❌ Failed to initialize WebSocket:", error);
+      setWsStatus("disconnected");
     }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -419,7 +494,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
   const value: WebSocketContextType = {
     wsStatus,
     reconnectAttempts: wsReconnectAttempts,
-    isConnected: wsStatus === 'connected',
+    isConnected: wsStatus === "connected",
     subscribeToMessages,
     unreadChatsCount,
     incrementUnreadCount,
