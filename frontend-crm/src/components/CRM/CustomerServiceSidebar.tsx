@@ -4,13 +4,8 @@
  * ============================================================================
  *
  * Sidebar component for displaying and filtering customer service chats.
- * Provides search functionality and advanced filtering options.
  *
- * Features:
- * - Real-time search for conversations
- * - Advanced filtering (status, agent, read status, labels, date)
- * - Visual indicators for chat status and unread messages
- * - Responsive scrollable chat list
+ * UPDATED: Added "Today", "Last 7 Days", "Last 30 Days" presets to the Date Picker.
  *
  * @module CustomerServiceSidebar
  */
@@ -21,6 +16,25 @@
 
 // React
 import { useState } from "react";
+import { format, subDays, startOfDay, endOfDay } from "date-fns"; // Added date-fns helpers
+import { Calendar as CalendarIcon } from "lucide-react";
+import { DateRange } from "react-day-picker";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 // UI Components
 import { Input } from "@/components/ui/input";
@@ -36,11 +50,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 // Icons
 import {
@@ -51,27 +60,13 @@ import {
   X,
   Loader2,
   CheckCircle2,
+  SlidersHorizontal,
 } from "lucide-react";
 
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
 
-/**
- * Chat interface for sidebar display (mapped from API response)
- *
- * @interface Chat
- * @property {string} id - Unique chat identifier
- * @property {string} customerName - Customer's display name
- * @property {string} lastMessage - Preview of last message content
- * @property {string} timestamp - Formatted time of last message
- * @property {number} unreadCount - Number of unread messages
- * @property {boolean} isAssigned - Whether chat is assigned to human agent (derived from handled_by === "human")
- * @property {string} assignedTo - Name of assigned agent (human_agent_name || ai_agent_name || "-")
- * @property {string} status - Current chat status
- * @property {string} channel - Communication channel (whatsapp, telegram, email, web, mcp)
- * @property {string} handledBy - Who is handling the chat: ai, human, or unassigned
- */
 interface Chat {
   id: string;
   customerName: string;
@@ -85,34 +80,14 @@ interface Chat {
   handledBy: "ai" | "human" | "unassigned";
 }
 
-/**
- * Filter configuration for chat list (aligned with API fields)
- *
- * @interface ChatFilters
- * @property {string} readStatus - Filter by read/unread status
- * @property {string} agent - Filter by assigned agent
- * @property {string} status - Filter by chat status
- * @property {string} channel - Filter by communication channel
- */
 export interface ChatFilters {
   readStatus: "all" | "read" | "unread";
   agent: string;
   status: "all" | "open" | "pending" | "assigned" | "resolved" | "closed";
   channel: "all" | "whatsapp" | "telegram" | "email" | "web" | "mcp" | string;
+  dateRange?: DateRange;
 }
 
-/**
- * Props for CustomerServiceSidebar component
- *
- * @interface CustomerServiceSidebarProps
- * @property {Chat[]} chats - Array of chat conversations
- * @property {string | null} activeChat - Currently selected chat ID
- * @property {function} onChatSelect - Callback when chat is selected
- * @property {string} filterType - Type of chats to display (assigned/unassigned)
- * @property {ChatFilters} filters - Current filter configuration
- * @property {function} onFiltersChange - Callback when filters change
- * @property {boolean} [isLoading] - Loading state for chats
- */
 interface CustomerServiceSidebarProps {
   chats: Chat[];
   activeChat: string | null;
@@ -127,15 +102,6 @@ interface CustomerServiceSidebarProps {
 // MAIN COMPONENT
 // ============================================================================
 
-/**
- * CustomerServiceSidebar Component
- *
- * Displays a filterable list of customer service conversations.
- * Includes search, advanced filters, and visual status indicators.
- *
- * @param {CustomerServiceSidebarProps} props - Component props
- * @returns {JSX.Element} Rendered sidebar component
- */
 export const CustomerServiceSidebar = ({
   chats,
   activeChat,
@@ -149,17 +115,13 @@ export const CustomerServiceSidebar = ({
   // STATE
   // ==========================================================================
 
-  /** Toggle state for filter panel */
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-
-  /** Search query for filtering chats by customer name */
   const [searchQuery, setSearchQuery] = useState("");
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   // ==========================================================================
   // COMPUTED VALUES
   // ==========================================================================
 
-  /** Extract unique agents from chats for filter dropdown (exclude "-" placeholder) */
   const agents = Array.from(
     new Set(
       chats
@@ -168,31 +130,17 @@ export const CustomerServiceSidebar = ({
     )
   );
 
-  /** Extract unique channels from chats for filter dropdown (exclude undefined/null) */
   const channels = Array.from(
     new Set(chats.filter((c) => c.channel).map((c) => c.channel))
   );
 
-  /**
-   * Filter chats based on multiple criteria:
-   *
-   * Server-side filters (handled by API in CustomerService.tsx):
-   * - handled_by (assigned/unassigned)
-   * - status_filter
-   * - channel
-   *
-   * Client-side filters (handled here):
-   * - searchQuery: Customer name search
-   * - readStatus: Computed from unreadCount
-   * - agent: Kept client-side (requires name-to-ID mapping for API)
-   */
   const filteredChats = chats.filter((chat) => {
-    // Filter by assigned/unassigned (backup, already handled by API)
+    // 1. Filter by Assigned/Unassigned (Base Filter)
     if (filterType === "assigned" ? !chat.isAssigned : chat.isAssigned) {
       return false;
     }
 
-    // Filter by search query (client-side only)
+    // 2. Filter by Search Query
     if (
       searchQuery &&
       !chat.customerName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -200,35 +148,25 @@ export const CustomerServiceSidebar = ({
       return false;
     }
 
-    // Filter by read status (client-side only - computed value)
+    // 3. Filter by Read Status (Client-side)
     if (filters.readStatus === "read" && chat.unreadCount > 0) return false;
     if (filters.readStatus === "unread" && chat.unreadCount === 0) return false;
 
-    // Filter by agent (client-side only - agent filter uses names, API needs UUIDs)
+    // 4. Filter by Agent (Client-side)
     if (filters.agent !== "all" && chat.assignedTo !== filters.agent)
       return false;
-
-    // NOTE: Status and Channel filters are now handled server-side via API
-    // Removed redundant client-side filtering for these fields
 
     return true;
   });
 
-  /** Count how many filters are currently active (not set to "all") */
   const activeFiltersCount = Object.values(filters).filter(
-    (v) => v !== "all"
+    (v) => v !== "all" && v !== undefined
   ).length;
 
   // ==========================================================================
   // UTILITY FUNCTIONS
   // ==========================================================================
 
-  /**
-   * Get color class for chat status indicator
-   *
-   * @param {string} status - Chat status
-   * @returns {string} Tailwind color class
-   */
   const getStatusColor = (status: string): string => {
     switch (status) {
       case "open":
@@ -239,22 +177,35 @@ export const CustomerServiceSidebar = ({
         return "bg-blue-500";
       case "resolved":
         return "bg-gray-500";
-      case "closed": // FIX: Handle closed color
+      case "closed":
         return "bg-slate-700";
       default:
         return "bg-gray-500";
     }
   };
 
-  /**
-   * Reset all filters to default "all" state
-   */
   const resetFilters = (): void => {
     onFiltersChange({
       readStatus: "all",
       agent: "all",
       status: "all",
       channel: "all",
+      dateRange: undefined,
+    });
+  };
+
+  // NEW: Helper to apply presets
+  const applyDatePreset = (days: number) => {
+    const today = new Date();
+    // 0 means "Today"
+    const from = days === 0 ? today : subDays(today, days);
+
+    onFiltersChange({
+      ...filters,
+      dateRange: {
+        from: startOfDay(from),
+        to: endOfDay(today),
+      },
     });
   };
 
@@ -263,301 +214,354 @@ export const CustomerServiceSidebar = ({
   // ==========================================================================
 
   return (
-    <div className="bg-card flex flex-col h-full">
-      {/* ====================================================================
-          SEARCH & FILTER SECTION - Fixed at top
-          ==================================================================== */}
-      <div className="p-2 border-b space-y-2 flex-shrink-0">
-        {/* Search Input */}
+    <div className="bg-card flex flex-col h-full border-r">
+      {/* HEADER: Search & Filter Button */}
+      <div className="p-3 border-b space-y-3 flex-shrink-0 bg-background/50 backdrop-blur-sm">
+        {/* Search Bar */}
         <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search conversations..."
-            className="pl-8 h-8 text-xs"
+            className="pl-9 h-9 text-sm"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
 
-        {/* Advanced Filters Panel (Collapsible) */}
-        <Collapsible open={isFilterOpen} onOpenChange={setIsFilterOpen}>
-          <div className="flex items-center justify-between">
-            <CollapsibleTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full justify-between h-8 text-xs"
-              >
-                <div className="flex items-center gap-1.5">
-                  <Filter className="h-3.5 w-3.5" />
-                  <span>Filters</span>
-                  {activeFiltersCount > 0 && (
-                    <Badge variant="secondary" className="ml-1 text-[10px] h-4">
-                      {activeFiltersCount}
-                    </Badge>
-                  )}
+        {/* Filter Modal Trigger */}
+        <Dialog open={isFilterModalOpen} onOpenChange={setIsFilterModalOpen}>
+          <DialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={cn(
+                "w-full justify-between h-9 text-xs",
+                activeFiltersCount > 0 &&
+                  "border-primary/50 bg-primary/5 text-primary"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                <span>Filter Conversations</span>
+              </div>
+              {activeFiltersCount > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-1 text-[10px] h-5 px-1.5 min-w-[20px] justify-center"
+                >
+                  {activeFiltersCount}
+                </Badge>
+              )}
+            </Button>
+          </DialogTrigger>
+
+          {/* FILTER MODAL CONTENT */}
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Filter className="h-5 w-5" />
+                Filter Options
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="grid gap-5 py-4">
+              {/* Date Range Picker - Full Width with Presets */}
+              <div className="space-y-2">
+                <Label>Date Range</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      id="date"
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !filters.dateRange && "text-muted-foreground"
+                      )}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {filters.dateRange?.from ? (
+                        filters.dateRange.to ? (
+                          <>
+                            {format(filters.dateRange.from, "LLL dd, y")} -{" "}
+                            {format(filters.dateRange.to, "LLL dd, y")}
+                          </>
+                        ) : (
+                          format(filters.dateRange.from, "LLL dd, y")
+                        )
+                      ) : (
+                        <span>Pick a date range</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="center">
+                    <div className="flex">
+                      {/* PRESETS SIDEBAR */}
+                      <div className="flex flex-col gap-2 p-3 border-r w-[140px]">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">
+                          Quick Select
+                        </p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs font-normal"
+                          onClick={() => applyDatePreset(0)}
+                        >
+                          Today
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs font-normal"
+                          onClick={() => applyDatePreset(1)}
+                        >
+                          Last 24 Hours
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs font-normal"
+                          onClick={() => applyDatePreset(7)}
+                        >
+                          Last 7 Days
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs font-normal"
+                          onClick={() => applyDatePreset(30)}
+                        >
+                          Last 30 Days
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="justify-start text-xs font-normal"
+                          onClick={() => applyDatePreset(90)}
+                        >
+                          Last 3 Months
+                        </Button>
+                      </div>
+
+                      {/* CALENDAR */}
+                      <div className="p-0">
+                        <Calendar
+                          initialFocus
+                          mode="range"
+                          defaultMonth={filters.dateRange?.from}
+                          selected={filters.dateRange}
+                          onSelect={(range) =>
+                            onFiltersChange({ ...filters, dateRange: range })
+                          }
+                          numberOfMonths={2}
+                        />
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Status Filter */}
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={filters.status}
+                    onValueChange={(value) =>
+                      onFiltersChange({ ...filters, status: value as any })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="open">Open</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="assigned">Assigned</SelectItem>
+                      <SelectItem value="resolved">Resolved</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </Button>
-            </CollapsibleTrigger>
-          </div>
 
-          <CollapsibleContent className="mt-2 space-y-2">
-            {/* Read Status */}
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold">Read Status</Label>
-              <Select
-                value={filters.readStatus}
-                onValueChange={(value) =>
-                  onFiltersChange({ ...filters, readStatus: value as any })
-                }
-              >
-                <SelectTrigger className="h-7 text-[10px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-[10px]">
-                    All
-                  </SelectItem>
-                  <SelectItem value="read" className="text-[10px]">
-                    Read
-                  </SelectItem>
-                  <SelectItem value="unread" className="text-[10px]">
-                    Unread
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+                {/* Read Status Filter */}
+                <div className="space-y-2">
+                  <Label>Read Status</Label>
+                  <Select
+                    value={filters.readStatus}
+                    onValueChange={(value) =>
+                      onFiltersChange({ ...filters, readStatus: value as any })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Read status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All</SelectItem>
+                      <SelectItem value="read">Read</SelectItem>
+                      <SelectItem value="unread">Unread</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Agent Filter */}
+                <div className="space-y-2">
+                  <Label>Assigned Agent</Label>
+                  <Select
+                    value={filters.agent}
+                    onValueChange={(value) =>
+                      onFiltersChange({ ...filters, agent: value })
+                    }
+                    disabled={agents.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select agent" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Agents</SelectItem>
+                      {agents.map((agent) => (
+                        <SelectItem key={agent} value={agent}>
+                          {agent}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Channel Filter */}
+                <div className="space-y-2">
+                  <Label>Channel</Label>
+                  <Select
+                    value={filters.channel}
+                    onValueChange={(value) =>
+                      onFiltersChange({ ...filters, channel: value })
+                    }
+                    disabled={channels.length === 0}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select channel" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Channels</SelectItem>
+                      {channels.map((channel) => (
+                        <SelectItem key={channel} value={channel}>
+                          {channel
+                            ? channel.charAt(0).toUpperCase() + channel.slice(1)
+                            : "-"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
 
-            {/* Status */}
-            <div className="space-y-1.5">
-              <Label className="text-[10px] font-semibold">Status</Label>
-              <Select
-                value={filters.status}
-                onValueChange={(value) =>
-                  onFiltersChange({ ...filters, status: value as any })
-                }
-              >
-                <SelectTrigger className="h-7 text-[10px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" className="text-[10px]">
-                    All Status
-                  </SelectItem>
-                  <SelectItem value="open" className="text-[10px]">
-                    Open
-                  </SelectItem>
-                  <SelectItem value="pending" className="text-[10px]">
-                    Pending
-                  </SelectItem>
-                  <SelectItem value="assigned" className="text-[10px]">
-                    Assigned
-                  </SelectItem>
-                  <SelectItem value="resolved" className="text-[10px]">
-                    Resolved
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Agent */}
-            {agents.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-semibold">
-                  Assigned Agent
-                </Label>
-                <Select
-                  value={filters.agent}
-                  onValueChange={(value) =>
-                    onFiltersChange({ ...filters, agent: value })
-                  }
-                >
-                  <SelectTrigger className="h-7 text-[10px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-[10px]">
-                      All Agents
-                    </SelectItem>
-                    {agents.map((agent) => (
-                      <SelectItem
-                        key={agent}
-                        value={agent}
-                        className="text-[10px]"
-                      >
-                        {agent}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Channel */}
-            {channels.length > 0 && (
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-semibold">Channel</Label>
-                <Select
-                  value={filters.channel}
-                  onValueChange={(value) =>
-                    onFiltersChange({ ...filters, channel: value })
-                  }
-                >
-                  <SelectTrigger className="h-7 text-[10px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-[10px]">
-                      All Channels
-                    </SelectItem>
-                    {channels.map((channel) => (
-                      <SelectItem
-                        key={channel}
-                        value={channel}
-                        className="text-[10px]"
-                      >
-                        {channel
-                          ? channel.charAt(0).toUpperCase() + channel.slice(1)
-                          : "-"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Reset Button */}
-            {activeFiltersCount > 0 && (
+            {/* Modal Footer */}
+            <DialogFooter className="flex sm:justify-between gap-2">
               <Button
-                variant="ghost"
-                size="sm"
+                type="button"
+                variant="outline"
                 onClick={resetFilters}
-                className="w-full text-[10px] h-7"
+                className="w-full sm:w-auto text-muted-foreground"
               >
-                <X className="h-3 w-3 mr-1" />
-                Reset Filters
+                <X className="mr-2 h-4 w-4" />
+                Reset
               </Button>
-            )}
-          </CollapsibleContent>
-        </Collapsible>
+              <DialogClose asChild>
+                <Button type="button" className="w-full sm:w-auto">
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Apply Filters
+                </Button>
+              </DialogClose>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
-      {/* ====================================================================
-          CHAT LIST SECTION - Scrollable
-          ==================================================================== */}
+      {/* CHAT LIST */}
       <ScrollArea className="flex-1">
-        {/* Loading State */}
         {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="text-center space-y-3">
-              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" />
-              <p className="text-xs text-muted-foreground">Loading chats...</p>
-            </div>
+          <div className="flex flex-col items-center justify-center py-12 space-y-4 text-muted-foreground">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-xs">Loading conversations...</p>
           </div>
         ) : (
-          <div className="divide-y">
-            {/* Chat Items */}
+          <div className="divide-y divide-border/50">
             {filteredChats.map((chat) => (
               <div
                 key={chat.id}
                 onClick={() => onChatSelect(chat.id)}
-                className={`p-2 cursor-pointer hover:bg-muted/50 transition-colors ${
-                  activeChat === chat.id ? "bg-muted" : ""
-                } ${
-                  chat.status === "resolved"
-                    ? "opacity-60 bg-gray-50 dark:bg-gray-900/30"
-                    : ""
-                }`}
+                className={cn(
+                  "p-3 cursor-pointer transition-all hover:bg-muted/50 group relative",
+                  activeChat === chat.id
+                    ? "bg-muted border-l-4 border-l-primary pl-2"
+                    : "border-l-4 border-l-transparent",
+                  chat.status === "resolved" &&
+                    "opacity-70 bg-gray-50/50 dark:bg-gray-900/10"
+                )}
               >
-                <div className="flex items-start gap-2">
-                  {/* Avatar with Status Indicator */}
+                <div className="flex items-start gap-3">
                   <div className="relative">
-                    <Avatar className="w-9 h-9">
-                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-xs">
+                    <Avatar className="w-10 h-10 border shadow-sm">
+                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
                         {chat.customerName
                           ? chat.customerName.charAt(0).toUpperCase()
                           : "?"}
                       </AvatarFallback>
                     </Avatar>
-                    {/* Status Indicator Badge */}
                     <div
-                      className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-card ${getStatusColor(
-                        chat.status
-                      )}`}
+                      className={cn(
+                        "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
+                        getStatusColor(chat.status)
+                      )}
                     />
                   </div>
 
-                  {/* Chat Details */}
-                  <div className="flex-1 min-w-0">
-                    {/* Header: Customer Name & Timestamp */}
-                    <div className="flex items-center justify-between mb-0.5">
-                      <h4 className="font-semibold text-xs truncate">
+                  <div className="flex-1 min-w-0 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-semibold text-sm truncate text-foreground/90">
                         {chat.customerName}
                       </h4>
-                      <span className="text-[10px] text-muted-foreground flex-shrink-0 ml-2">
+                      <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
                         {chat.timestamp}
                       </span>
                     </div>
 
-                    {/* Last Message Preview */}
-                    <p className="text-[10px] text-muted-foreground truncate mb-1.5">
+                    <p className="text-xs text-muted-foreground truncate line-clamp-1">
                       {chat.lastMessage}
                     </p>
 
-                    {/* Badges: Assignment, Channel & Unread Count */}
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {/* Agent Assignment Badge */}
-                      {chat.handledBy === "human" ? (
-                        <Badge
-                          variant="secondary"
-                          className="text-[9px] h-4 px-1.5 flex items-center gap-1"
-                        >
-                          <User className="w-2.5 h-2.5" />
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      {/* Handler Badge */}
+                      <Badge
+                        variant="secondary"
+                        className="h-5 px-1.5 text-[10px] gap-1 font-normal bg-secondary/50"
+                      >
+                        {chat.handledBy === "ai" ? (
+                          <Bot className="w-3 h-3" />
+                        ) : (
+                          <User className="w-3 h-3" />
+                        )}
+                        <span className="truncate max-w-[80px]">
                           {chat.assignedTo}
-                        </Badge>
-                      ) : chat.handledBy === "ai" ? (
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] h-4 px-1.5 flex items-center gap-1"
-                        >
-                          <Bot className="w-2.5 h-2.5" />
-                          {chat.assignedTo}
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="text-[9px] h-4 px-1.5"
-                        >
-                          Unassigned
-                        </Badge>
-                      )}
+                        </span>
+                      </Badge>
 
-                      {/* Channel Badge */}
+                      {/* Channel */}
                       {chat.channel && (
                         <Badge
-                          variant="secondary"
-                          className="text-[9px] h-4 px-1.5"
-                        >
-                          {chat.channel.charAt(0).toUpperCase() +
-                            chat.channel.slice(1)}
-                        </Badge>
-                      )}
-
-                      {/* Resolved Status Badge */}
-                      {chat.status === "resolved" && (
-                        <Badge
                           variant="outline"
-                          className="text-[9px] h-4 px-1.5 flex items-center gap-0.5 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 border-green-300"
+                          className="h-5 px-1.5 text-[10px] font-normal border-border/50 text-muted-foreground capitalize"
                         >
-                          <CheckCircle2 className="w-2.5 h-2.5" />
-                          Resolved
+                          {chat.channel}
                         </Badge>
                       )}
 
-                      {/* Unread Count Badge */}
+                      {/* Unread Counter */}
                       {chat.unreadCount > 0 && (
-                        <Badge className="bg-primary text-primary-foreground text-[9px] h-4 px-1.5">
+                        <Badge className="ml-auto bg-primary text-primary-foreground h-5 px-1.5 min-w-[20px] justify-center text-[10px] shadow-sm">
                           {chat.unreadCount}
                         </Badge>
                       )}
@@ -567,10 +571,29 @@ export const CustomerServiceSidebar = ({
               </div>
             ))}
 
-            {/* Empty State */}
             {!isLoading && filteredChats.length === 0 && (
-              <div className="p-6 text-center text-muted-foreground">
-                <p className="text-xs">No conversations found</p>
+              <div className="flex flex-col items-center justify-center py-12 text-center space-y-3 px-4">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                  <Search className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-medium text-foreground">
+                    No conversations found
+                  </p>
+                  <p className="text-xs text-muted-foreground max-w-[180px] mx-auto">
+                    Try adjusting your filters or search terms
+                  </p>
+                </div>
+                {activeFiltersCount > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={resetFilters}
+                    className="h-8 text-xs"
+                  >
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             )}
           </div>

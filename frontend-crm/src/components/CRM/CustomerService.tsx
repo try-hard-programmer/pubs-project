@@ -206,6 +206,7 @@ export const CustomerService = ({
     agent: "all",
     status: "all",
     channel: "all",
+    dateRange: undefined, // Initialize
   });
 
   const [agentModalOpen, setAgentModalOpen] = useState(false);
@@ -329,11 +330,23 @@ export const CustomerService = ({
       try {
         setChatsLoading(true);
 
+        // NEW: Extract dates
+        const createdAfter = filters.dateRange?.from
+          ? filters.dateRange.from.toISOString()
+          : undefined;
+
+        const createdBefore = filters.dateRange?.to
+          ? filters.dateRange.to.toISOString()
+          : undefined;
+
         const apiChats = await crmChatsService.getChats({
           handled_by: filterType === "assigned" ? "human" : undefined,
           status_filter: filters.status !== "all" ? filters.status : undefined,
           channel:
             filters.channel !== "all" ? (filters.channel as any) : undefined,
+          // NEW: Pass to API
+          created_after: createdAfter,
+          created_before: createdBefore,
         });
 
         const transformedChats: Chat[] = await Promise.all(

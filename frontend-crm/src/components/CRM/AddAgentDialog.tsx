@@ -124,7 +124,8 @@ export const AddAgentDialog = ({
         ...formData,
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
-        phone: formData.phone.trim(),
+        // Filter out the leading + to avoid double prefixes (e.g. +62 becoming ++62)
+        phone: formData.phone.trim().replace(/^\+/, ""),
       });
       handleClose();
     }

@@ -135,20 +135,22 @@ export interface ChatEscalationRequest {
 
 // NEW: Chat List Query Params
 export interface ChatListParams {
-  // Existing
+  // Existing params...
   status_filter?: ChatStatus;
   channel?: CommunicationChannel;
   assigned_agent_id?: string;
   search?: string;
   skip?: number;
   limit?: number;
-
-  // NEW: Dual agent tracking filters
   handled_by?: HandledBy;
   ai_assigned_to?: string;
   human_assigned_to?: string;
   escalated?: boolean;
   unassigned?: boolean;
+
+  // NEW: Date Range params
+  created_after?: string;
+  created_before?: string;
 }
 
 export interface TicketsResponse {
@@ -188,8 +190,6 @@ export const getChats = async (
     queryParams.append("skip", params.skip.toString());
   if (params?.limit !== undefined)
     queryParams.append("limit", params.limit.toString());
-
-  // NEW: Dual agent tracking filters
   if (params?.handled_by) queryParams.append("handled_by", params.handled_by);
   if (params?.ai_assigned_to)
     queryParams.append("ai_assigned_to", params.ai_assigned_to);
@@ -199,6 +199,12 @@ export const getChats = async (
     queryParams.append("escalated", params.escalated.toString());
   if (params?.unassigned !== undefined)
     queryParams.append("unassigned", params.unassigned.toString());
+
+  // NEW: Append Date Params
+  if (params?.created_after)
+    queryParams.append("created_after", params.created_after);
+  if (params?.created_before)
+    queryParams.append("created_before", params.created_before);
 
   const url = `/crm/chats${
     queryParams.toString() ? `?${queryParams.toString()}` : ""

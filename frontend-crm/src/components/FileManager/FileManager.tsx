@@ -139,12 +139,25 @@ export const FileManager = () => {
           "Error: Failed Create Folder Allowed characters: letters, numbers, spaces, . _ -"
         );
       } else {
-        await createFolder({
-          name,
-          parentFolderId: currentFolderId,
-        });
+        try {
+          // 2. Call backend
+          await createFolder({
+            name,
+            parentFolderId: currentFolderId,
+          });
 
-        toast.success("Folder created successfully");
+          toast.success("Folder created successfully");
+        } catch (error: any) {
+          let msg = "";
+          try {
+            msg =
+              JSON.parse(error.message.replace("Error: ", "")).detail || msg;
+          } catch {
+            msg = error.message || msg;
+          }
+
+          toast.error(msg);
+        }
       }
     } catch (error: any) {
       console.error("Error creating folder:", error);
@@ -253,7 +266,6 @@ export const FileManager = () => {
       <Sidebar
         activeSection={activeSection}
         onSectionChange={handleSectionChange}
-        isCollapsed={isSidebarCollapsed}
         onCollapseChange={setIsSidebarCollapsed}
       />
 
