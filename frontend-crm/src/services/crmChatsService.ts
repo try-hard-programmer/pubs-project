@@ -169,6 +169,11 @@ export interface TicketActivity {
   actor_email?: string;
 }
 
+interface CustomersApiResponse {
+  customers: Customer[];
+  total: number;
+}
+
 // ============= API Functions =============
 
 /**
@@ -228,6 +233,7 @@ export const createChat = async (chatData: {
   contact: string;
   channel: CommunicationChannel;
   initial_message: string;
+  assigned_agent_id?: string; // <--- ADD THIS FIELD
 }): Promise<Chat> => {
   return apiClient.post<Chat>("/crm/chats", chatData);
 };
@@ -435,7 +441,10 @@ export const getCustomers = async (params?: {
   const url = `/crm/customers${
     queryParams.toString() ? `?${queryParams.toString()}` : ""
   }`;
-  return apiClient.get<Customer[]>(url);
+
+  // FIX: Fetch as object, but return only the 'customers' array
+  const response = await apiClient.get<CustomersApiResponse>(url);
+  return response.customers;
 };
 
 /**

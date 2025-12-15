@@ -1312,19 +1312,36 @@ export const CustomerService = ({
         contact: data.contact,
         channel: data.channel,
         initial_message: data.initialMessage,
+        // The backend will now handle the "assigned_agent_id" logic internally
+        // if you updated the service as discussed previously.
+        assigned_agent_id: data.assignedAgentId,
       });
 
-      if (data.assignedAgentId) {
-        try {
-          await crmChatsService.assignChat(
-            createdChat.id,
-            data.assignedAgentId,
-            { assignToMe: false }
-          );
-        } catch (error) {
-          console.error("Failed to assign chat to agent:", error);
-        }
+      // ============================================================
+      // NEW LOGIC: Smart Merge Handling
+      // ============================================================
+
+      // 1. Check if this chat ID already exists in our local state
+      const existingChat = chatsRef.current.find(
+        (c) => c.id === createdChat.id
+      );
+
+      if (existingChat) {
+        // SCENARIO A: Chat Exists (Merged)
+        console.log("🔀 Chat Merged/Found Existing:", createdChat.id);
+
+        // Just switch focus to the existing chat
+        setActiveChat(createdChat.id);
+
+        toast.info("Percakapan yang sudah ada ditemukan dan dibuka.", {
+          description: "Kontak ini telah digabungkan dengan customer yang ada.",
+        });
+        return; // STOP HERE, do not add duplicate to list
       }
+
+      // ============================================================
+      // SCENARIO B: New Chat (Proceed as usual)
+      // ============================================================
 
       const assignedAgent = data.assignedAgentId
         ? agents.find((a) => a.id === data.assignedAgentId)
@@ -1344,17 +1361,16 @@ export const CustomerService = ({
         assignedTo: assignedAgent?.name || "-",
         handledBy: data.assignedAgentId ? "human" : "unassigned",
         channel: data.channel || "-",
-        status: data.assignedAgentId
-          ? "assigned"
-          : (createdChat.status as
-              | "open"
-              | "pending"
-              | "assigned"
-              | "resolved"),
+        // Use backend status if available, fallback to logic
+        status:
+          (createdChat.status as any) ||
+          (data.assignedAgentId ? "assigned" : "open"),
         messages: [],
         labels: [],
         createdDate: new Date(createdChat.created_at).toLocaleDateString(),
         tickets: [],
+        humanAgentId: data.assignedAgentId,
+        humanAgentName: assignedAgent?.name,
       };
 
       setChats((prevChats) => [newChat, ...prevChats]);

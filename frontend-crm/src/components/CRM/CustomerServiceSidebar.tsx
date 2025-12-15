@@ -1,22 +1,5 @@
-/**
- * ============================================================================
- * CustomerServiceSidebar Component
- * ============================================================================
- *
- * Sidebar component for displaying and filtering customer service chats.
- *
- * UPDATED: Added "Today", "Last 7 Days", "Last 30 Days" presets to the Date Picker.
- *
- * @module CustomerServiceSidebar
- */
-
-// ============================================================================
-// IMPORTS
-// ============================================================================
-
-// React
 import { useState } from "react";
-import { format, subDays, startOfDay, endOfDay } from "date-fns"; // Added date-fns helpers
+import { format, subDays, startOfDay, endOfDay } from "date-fns";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
@@ -80,8 +63,9 @@ interface Chat {
   handledBy: "ai" | "human" | "unassigned";
 }
 
+// FIX: Ensure 'readStatus' is defined here
 export interface ChatFilters {
-  readStatus: "all" | "read" | "unread";
+  readStatus: "all" | "read" | "unread"; // <--- THIS LINE WAS LIKELY MISSING
   agent: string;
   status: "all" | "open" | "pending" | "assigned" | "resolved" | "closed";
   channel: "all" | "whatsapp" | "telegram" | "email" | "web" | "mcp" | string;
@@ -111,17 +95,10 @@ export const CustomerServiceSidebar = ({
   onFiltersChange,
   isLoading = false,
 }: CustomerServiceSidebarProps) => {
-  // ==========================================================================
-  // STATE
-  // ==========================================================================
-
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
-  // ==========================================================================
-  // COMPUTED VALUES
-  // ==========================================================================
-
+  // Get unique lists for dropdowns
   const agents = Array.from(
     new Set(
       chats
@@ -134,6 +111,7 @@ export const CustomerServiceSidebar = ({
     new Set(chats.filter((c) => c.channel).map((c) => c.channel))
   );
 
+  // Filter Logic
   const filteredChats = chats.filter((chat) => {
     // 1. Filter by Assigned/Unassigned (Base Filter)
     if (filterType === "assigned" ? !chat.isAssigned : chat.isAssigned) {
@@ -156,16 +134,20 @@ export const CustomerServiceSidebar = ({
     if (filters.agent !== "all" && chat.assignedTo !== filters.agent)
       return false;
 
+    // 5. Filter by Status (Client-side) - Logic previously implied but good to be explicit
+    if (filters.status !== "all" && chat.status !== filters.status)
+      return false;
+
+    // 6. Filter by Channel (Client-side)
+    if (filters.channel !== "all" && chat.channel !== filters.channel)
+      return false;
+
     return true;
   });
 
   const activeFiltersCount = Object.values(filters).filter(
     (v) => v !== "all" && v !== undefined
   ).length;
-
-  // ==========================================================================
-  // UTILITY FUNCTIONS
-  // ==========================================================================
 
   const getStatusColor = (status: string): string => {
     switch (status) {
@@ -194,7 +176,6 @@ export const CustomerServiceSidebar = ({
     });
   };
 
-  // NEW: Helper to apply presets
   const applyDatePreset = (days: number) => {
     const today = new Date();
     // 0 means "Today"
@@ -208,10 +189,6 @@ export const CustomerServiceSidebar = ({
       },
     });
   };
-
-  // ==========================================================================
-  // RENDER
-  // ==========================================================================
 
   return (
     <div className="bg-card flex flex-col h-full border-r">
