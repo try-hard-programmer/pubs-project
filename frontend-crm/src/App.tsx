@@ -6,6 +6,7 @@ import { Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/AuthPage";
+import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 
 const queryClient = new QueryClient();
@@ -16,8 +17,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <Routes>
-        {/* Public Route */}
+        {/* Public Routes */}
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/accept-invitation" element={<AcceptInvitation />} />
 
         {/* Protected Routes (Wrapped) */}
         <Route

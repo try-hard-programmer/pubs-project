@@ -35,6 +35,20 @@ import { RecoveryHashGuard } from "./components/forget-password/RecoveryHashGuar
 
 const queryClient = new QueryClient();
 
+if (
+  window.location.pathname.includes("/accept-invitation") &&
+  !window.location.hash
+) {
+  // Take the current path and query (e.g. /accept-invitation?token=XYZ)
+  // and move it after the hash (e.g. /#/accept-invitation?token=XYZ)
+  const newUrl =
+    window.location.origin +
+    "/#" +
+    window.location.pathname +
+    window.location.search;
+  window.location.replace(newUrl);
+}
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>

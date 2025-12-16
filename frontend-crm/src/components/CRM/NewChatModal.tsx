@@ -29,6 +29,7 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
+  Info,
 } from "lucide-react";
 import {
   type CommunicationChannel,
@@ -36,6 +37,13 @@ import {
   getCustomers,
 } from "@/services/crmChatsService";
 import { cn } from "@/lib/utils";
+
+export interface ExistingChatSnippet {
+  id: string;
+  customerName: string;
+  contact: string;
+  customerId?: string;
+}
 
 interface Agent {
   id: string;
@@ -48,6 +56,8 @@ interface NewChatModalProps {
   open: boolean;
   onClose: () => void;
   agents: Agent[];
+  existingChats: ExistingChatSnippet[];
+  onOpenExistingChat: (chatId: string) => void;
   onCreateChat: (data: {
     channel: CommunicationChannel;
     contact: string;
@@ -61,22 +71,17 @@ export const NewChatModal = ({
   open,
   onClose,
   agents,
+  existingChats = [],
+  onOpenExistingChat,
   onCreateChat,
 }: NewChatModalProps) => {
-  // Shared State
   const [channel, setChannel] = useState<CommunicationChannel>("whatsapp");
   const [initialMessage, setInitialMessage] = useState("");
   const [assignedAgentId, setAssignedAgentId] = useState<string>("unassigned");
   const [isCreating, setIsCreating] = useState(false);
-
-  // Tab State
   const [activeTab, setActiveTab] = useState<"existing" | "manual">("existing");
-
-  // Manual Input State
   const [manualName, setManualName] = useState("");
   const [manualContact, setManualContact] = useState("");
-
-  // Search State
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
@@ -84,7 +89,6 @@ export const NewChatModal = ({
   );
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const channels = [
@@ -92,13 +96,13 @@ export const NewChatModal = ({
       value: "whatsapp",
       label: "WhatsApp",
       icon: MessageCircle,
-      placeholder: "+62 812 3456 7890",
+      placeholder: "+62 812...",
     },
     {
       value: "telegram",
       label: "Telegram",
       icon: Send,
-      placeholder: "@username, ID (843...), atau +62...",
+      placeholder: "@username...",
     },
     {
       value: "email",
@@ -116,7 +120,6 @@ export const NewChatModal = ({
 
   const selectedChannel = channels.find((c) => c.value === channel);
 
-  // Reset when modal opens/closes
   useEffect(() => {
     if (open) {
       setSearchQuery("");
@@ -124,26 +127,35 @@ export const NewChatModal = ({
       setSelectedCustomer(null);
       setManualName("");
       setManualContact("");
+      setInitialMessage("");
       setErrors({});
       setActiveTab("existing");
     }
   }, [open]);
 
-  // Handle Customer Search
+  // --- BEST PRACTICE: STRICT FILTERING IN SEARCH ---
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
       return;
     }
-
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
 
     searchTimeoutRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        // Fetch from API
-        const results = await getCustomers({ search: searchQuery, limit: 5 });
-        setSearchResults(results);
+        const results = await getCustomers({ search: searchQuery, limit: 10 });
+
+        // 🛡️ FILTER: Only show customers valid for the selected channel
+        const filteredResults = results.filter((customer) => {
+          if (channel === "whatsapp") return !!customer.phone;
+          if (channel === "telegram")
+            return !!(customer.metadata?.telegram_id || customer.phone);
+          if (channel === "email") return !!customer.email;
+          return true;
+        });
+
+        setSearchResults(filteredResults.slice(0, 5));
       } catch (error) {
         console.error("Failed to search customers", error);
       } finally {
@@ -154,31 +166,26 @@ export const NewChatModal = ({
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
-  }, [searchQuery]);
+  }, [searchQuery, channel]); // Re-run if channel changes
 
   const handleSelectCustomer = (customer: Customer) => {
-    // Validate compatibility immediately
+    // Double check (Guard Clause)
     let isValid = true;
-    let errorMsg = "";
-
-    if (channel === "whatsapp" && !customer.phone) {
+    if (channel === "whatsapp" && !customer.phone) isValid = false;
+    else if (channel === "email" && !customer.email) isValid = false;
+    else if (
+      channel === "telegram" &&
+      !customer.metadata?.telegram_id &&
+      !customer.phone
+    )
       isValid = false;
-      errorMsg = "Customer ini tidak memiliki nomor telepon untuk WhatsApp.";
-    } else if (channel === "email" && !customer.email) {
-      isValid = false;
-      errorMsg = "Customer ini tidak memiliki alamat email.";
-    } else if (channel === "telegram") {
-      // For Telegram, we check metadata ID OR phone
-      const hasTeleId = customer.metadata?.telegram_id;
-      if (!customer.phone && !hasTeleId) {
-        isValid = false;
-        errorMsg = "Customer ini tidak memiliki Phone atau Telegram ID.";
-      }
-    }
 
     if (!isValid) {
-      setErrors((prev) => ({ ...prev, selection: errorMsg }));
-      return; // Don't select
+      setErrors((prev) => ({
+        ...prev,
+        selection: `Customer ini tidak valid untuk channel ${channel}`,
+      }));
+      return;
     }
 
     setSelectedCustomer(customer);
@@ -187,32 +194,30 @@ export const NewChatModal = ({
     setErrors({});
   };
 
+  const hasEmoji = (str: string) =>
+    /(\p{Extended_Pictographic}|\p{Emoji_Presentation})/gu.test(str);
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-
     if (activeTab === "manual") {
-      if (!manualName.trim())
-        newErrors.customerName = "Nama customer wajib diisi";
+      if (channel === "telegram")
+        newErrors.selection = "Manual input not allowed for Telegram";
+      if (!manualName.trim()) newErrors.customerName = "Nama wajib diisi";
+      else if (hasEmoji(manualName))
+        newErrors.customerName = "Nama tidak boleh emoticon";
+
       if (!manualContact.trim()) newErrors.contact = "Kontak wajib diisi";
-
-      // Basic format check
-      if (manualContact.trim()) {
-        if (
-          (channel === "email" || channel === "web") &&
-          !manualContact.includes("@")
-        ) {
-          newErrors.contact = "Format email tidak valid";
-        }
-      }
+      else if (hasEmoji(manualContact))
+        newErrors.contact = "Kontak tidak boleh emoticon";
     } else {
-      if (!selectedCustomer) {
-        newErrors.selection = "Silakan pilih customer dari database";
-      }
+      if (!selectedCustomer)
+        newErrors.selection = "Pilih customer dari database";
     }
 
-    if (!initialMessage.trim()) {
+    if (!initialMessage.trim())
       newErrors.initialMessage = "Pesan awal wajib diisi";
-    }
+    else if (hasEmoji(initialMessage))
+      newErrors.initialMessage = "Pesan tidak boleh emoticon";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -220,39 +225,39 @@ export const NewChatModal = ({
 
   const handleSubmit = async () => {
     if (!validateForm()) return;
-
     setIsCreating(true);
     try {
-      let finalName = "";
-      let finalContact = "";
+      let finalName = "",
+        finalContact = "";
 
       if (activeTab === "existing" && selectedCustomer) {
         finalName = selectedCustomer.name;
-
-        // Smart Contact Selection
-        if (channel === "email" || channel === "web") {
-          finalContact = selectedCustomer.email || "";
-        } else if (channel === "telegram") {
-          // Prefer Telegram ID if available (Ghost users), otherwise Phone
+        if (channel === "email") finalContact = selectedCustomer.email || "";
+        else if (channel === "telegram")
           finalContact =
             selectedCustomer.metadata?.telegram_id ||
             selectedCustomer.phone ||
             "";
-        } else {
-          // WhatsApp
-          finalContact = selectedCustomer.phone || "";
-        }
+        else finalContact = selectedCustomer.phone || "";
       } else {
         finalName = manualName.trim();
         finalContact = manualContact.trim();
       }
 
-      // Sanitize Phone Numbers (remove leading +)
-      // But keep Telegram IDs intact (unless they look like phones with +)
-      if (channel === "whatsapp" || channel === "telegram") {
-        if (finalContact.startsWith("+")) {
-          finalContact = finalContact.replace(/^\+/, "");
-        }
+      if (channel === "whatsapp" && finalContact.startsWith("+"))
+        finalContact = finalContact.replace(/^\+/, "");
+
+      // Non-Blocking Duplicate Check
+      const cleanNew = finalContact.replace(/[^a-zA-Z0-9]/g, "");
+      const duplicate = existingChats.find((c) => {
+        if (selectedCustomer?.id && c.customerId === selectedCustomer.id)
+          return true;
+        const cleanExisting = (c.contact || "").replace(/[^a-zA-Z0-9]/g, "");
+        return cleanExisting && cleanExisting === cleanNew;
+      });
+
+      if (duplicate && onOpenExistingChat) {
+        onOpenExistingChat(duplicate.id); // UX Switch
       }
 
       await onCreateChat({
@@ -263,10 +268,9 @@ export const NewChatModal = ({
         assignedAgentId:
           assignedAgentId !== "unassigned" ? assignedAgentId : undefined,
       });
-
       handleClose();
     } catch (error) {
-      console.error("Error creating chat:", error);
+      console.error(error);
     } finally {
       setIsCreating(false);
     }
@@ -293,51 +297,47 @@ export const NewChatModal = ({
         <DialogHeader>
           <DialogTitle>Buat Chat Baru</DialogTitle>
           <DialogDescription>
-            Pilih customer dari database atau masukkan kontak manual.
+            Pilih customer sesuai channel yang valid.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* 1. Channel Selection */}
+          {/* Channel */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label className="text-right">Channel</Label>
             <Select
               value={channel}
-              onValueChange={(value) => {
-                setChannel(value as CommunicationChannel);
-                setSelectedCustomer(null); // Reset selection on channel change
-                setErrors({});
+              onValueChange={(v) => {
+                setChannel(v as any);
+                setSelectedCustomer(null);
+                if (v === "telegram") setActiveTab("existing");
               }}
               disabled={isCreating}
             >
               <SelectTrigger className="col-span-3">
                 <SelectValue>
-                  <div className="flex items-center gap-2">
-                    <ChannelIcon className="h-4 w-4" />
-                    <span>{selectedChannel?.label}</span>
+                  <div className="flex gap-2">
+                    <ChannelIcon className="w-4 h-4" />
+                    {selectedChannel?.label}
                   </div>
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                {channels.map((ch) => {
-                  const Icon = ch.icon;
-                  return (
-                    <SelectItem key={ch.value} value={ch.value}>
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-4 w-4" />
-                        <span>{ch.label}</span>
-                      </div>
-                    </SelectItem>
-                  );
-                })}
+                {channels.map((ch) => (
+                  <SelectItem key={ch.value} value={ch.value}>
+                    {ch.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* 2. Tabs */}
+          {/* Tabs */}
           <Tabs
             value={activeTab}
-            onValueChange={(v) => setActiveTab(v as any)}
+            onValueChange={(v) => {
+              if (channel !== "telegram") setActiveTab(v as any);
+            }}
             className="w-full"
           >
             <div className="grid grid-cols-4 gap-4">
@@ -345,87 +345,64 @@ export const NewChatModal = ({
               <div className="col-span-3">
                 <TabsList className="grid w-full grid-cols-2">
                   <TabsTrigger value="existing">Cari Database</TabsTrigger>
-                  <TabsTrigger value="manual">Input Manual</TabsTrigger>
+                  <TabsTrigger
+                    value="manual"
+                    disabled={channel === "telegram"}
+                    className={channel === "telegram" ? "opacity-50" : ""}
+                  >
+                    Input Manual
+                  </TabsTrigger>
                 </TabsList>
+                {channel === "telegram" && (
+                  <p className="text-[10px] text-amber-600 mt-2">
+                    Telegram butuh ID valid (Existing Customer).
+                  </p>
+                )}
               </div>
             </div>
 
-            {/* TAB 1: EXISTING */}
             <TabsContent value="existing" className="mt-4 space-y-4">
               <div className="grid grid-cols-4 items-start gap-4">
                 <Label className="text-right pt-2.5">Customer</Label>
-                <div className="col-span-3 space-y-2">
+                <div className="col-span-3 relative">
                   {!selectedCustomer ? (
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <>
                       <Input
-                        placeholder="Ketik nama / email / telepon..."
-                        className="pl-9"
+                        placeholder={`Cari customer ${selectedChannel?.label}...`}
                         value={searchQuery}
-                        onChange={(e) => {
-                          setSearchQuery(e.target.value);
-                          setErrors({});
-                        }}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-9"
                       />
+                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
                       {isSearching && (
-                        <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                        <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin" />
                       )}
-
-                      {/* Search Results */}
                       {searchResults.length > 0 && (
                         <div className="absolute top-full mt-1 w-full bg-popover border rounded-md shadow-lg z-50 max-h-[200px] overflow-auto">
-                          {searchResults.map((customer) => (
+                          {searchResults.map((c) => (
                             <div
-                              key={customer.id}
-                              className="px-3 py-2.5 hover:bg-accent cursor-pointer flex items-center justify-between border-b last:border-0"
-                              onClick={() => handleSelectCustomer(customer)}
+                              key={c.id}
+                              className="p-2 hover:bg-accent cursor-pointer flex justify-between"
+                              onClick={() => handleSelectCustomer(c)}
                             >
-                              <div className="flex flex-col gap-0.5">
-                                <span className="font-medium text-sm">
-                                  {customer.name}
-                                </span>
-                                <span className="text-xs text-muted-foreground flex items-center gap-2">
-                                  {customer.phone ||
-                                  customer.metadata?.telegram_id ? (
-                                    <span className="flex items-center gap-1">
-                                      <MessageCircle className="h-3 w-3" />
-                                      {customer.phone ||
-                                        customer.metadata?.telegram_id}
-                                    </span>
-                                  ) : null}
-                                  {customer.email && (
-                                    <span className="flex items-center gap-1 border-l pl-2 border-border">
-                                      <Mail className="h-3 w-3" />
-                                      {customer.email}
-                                    </span>
-                                  )}
-                                </span>
+                              <div className="text-sm font-medium">
+                                {c.name}
                               </div>
-                              <User className="h-4 w-4 text-muted-foreground" />
+                              <div className="text-xs text-muted-foreground">
+                                {channel === "email"
+                                  ? c.email
+                                  : c.phone || c.metadata?.telegram_id}
+                              </div>
                             </div>
                           ))}
                         </div>
                       )}
-                    </div>
+                    </>
                   ) : (
-                    <div className="flex items-center justify-between p-3 border rounded-md bg-green-50/50 border-green-200">
-                      <div className="flex items-center gap-3">
-                        <div className="h-8 w-8 rounded-full bg-green-100 text-green-600 flex items-center justify-center">
-                          <CheckCircle2 className="h-4 w-4" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-sm text-foreground">
-                            {selectedCustomer.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {channel === "telegram"
-                              ? selectedCustomer.metadata?.telegram_id ||
-                                selectedCustomer.phone
-                              : selectedCustomer.phone ||
-                                selectedCustomer.email}
-                          </p>
-                        </div>
-                      </div>
+                    <div className="flex justify-between p-2 border rounded bg-green-50">
+                      <span className="text-sm font-medium">
+                        {selectedCustomer.name}
+                      </span>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -436,8 +413,7 @@ export const NewChatModal = ({
                     </div>
                   )}
                   {errors.selection && (
-                    <p className="text-xs text-red-500 flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3" />
+                    <p className="text-xs text-red-500 mt-1">
                       {errors.selection}
                     </p>
                   )}
@@ -445,85 +421,47 @@ export const NewChatModal = ({
               </div>
             </TabsContent>
 
-            {/* TAB 2: MANUAL */}
             <TabsContent value="manual" className="mt-4 space-y-4">
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">Nama</Label>
-                <div className="col-span-3">
-                  <Input
-                    placeholder="Nama customer baru"
-                    value={manualName}
-                    onChange={(e) => setManualName(e.target.value)}
-                  />
-                  {errors.customerName && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {errors.customerName}
-                    </p>
-                  )}
-                </div>
+                <Input
+                  className="col-span-3"
+                  value={manualName}
+                  onChange={(e) => setManualName(e.target.value)}
+                />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">Kontak</Label>
-                <div className="col-span-3">
-                  <Input
-                    placeholder={selectedChannel?.placeholder}
-                    value={manualContact}
-                    onChange={(e) => setManualContact(e.target.value)}
-                  />
-                  {errors.contact && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {errors.contact}
-                    </p>
-                  )}
-                  <p className="text-[10px] text-muted-foreground mt-1">
-                    {channel === "telegram"
-                      ? "Bisa nomor HP, Username (@...), atau ID (123...)"
-                      : "Masukkan nomor/email yang valid"}
-                  </p>
-                </div>
+                <Input
+                  className="col-span-3"
+                  value={manualContact}
+                  onChange={(e) => setManualContact(e.target.value)}
+                  placeholder={selectedChannel?.placeholder}
+                />
               </div>
+              {(errors.customerName || errors.contact) && (
+                <p className="text-xs text-red-500 text-right">
+                  {errors.customerName || errors.contact}
+                </p>
+              )}
             </TabsContent>
           </Tabs>
 
-          {/* 3. Assign & Message */}
+          {/* Assign & Message */}
           <div className="grid grid-cols-4 items-center gap-4">
             <Label className="text-right">Assign</Label>
-            <Select
-              value={assignedAgentId}
-              onValueChange={setAssignedAgentId}
-              disabled={isCreating}
-            >
+            <Select value={assignedAgentId} onValueChange={setAssignedAgentId}>
               <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Pilih agent">
-                  {assignedAgentId === "unassigned" ? (
-                    <span className="text-muted-foreground">
-                      Tidak assign (AI)
-                    </span>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <User className="h-4 w-4" />
-                      <span>
-                        {agents.find((a) => a.id === assignedAgentId)?.name}
-                      </span>
-                    </div>
-                  )}
-                </SelectValue>
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="unassigned">
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="h-4 w-4" />
-                    <span>Tidak assign (AI)</span>
-                  </div>
-                </SelectItem>
+                <SelectItem value="unassigned">Tidak assign (AI)</SelectItem>
+                {/* Removed Assign to Me option */}
                 {agents
                   .filter((agent) => agent.status === "active")
                   .map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4" />
-                        <span>{agent.name}</span>
-                      </div>
+                      {agent.name}
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -534,12 +472,8 @@ export const NewChatModal = ({
             <Label className="text-right pt-2">Pesan</Label>
             <div className="col-span-3">
               <Textarea
-                placeholder="Halo, ada yang bisa kami bantu?"
                 value={initialMessage}
-                onChange={(e) => {
-                  setInitialMessage(e.target.value);
-                  setErrors((prev) => ({ ...prev, initialMessage: "" }));
-                }}
+                onChange={(e) => setInitialMessage(e.target.value)}
                 rows={3}
               />
               {errors.initialMessage && (
@@ -552,25 +486,11 @@ export const NewChatModal = ({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={isCreating}>
+          <Button variant="outline" onClick={handleClose}>
             Batal
           </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={isCreating}
-            className="gap-2"
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Memproses...
-              </>
-            ) : (
-              <>
-                <Send className="h-4 w-4" />
-                Buat Chat
-              </>
-            )}
+          <Button onClick={handleSubmit} disabled={isCreating}>
+            {isCreating ? "Memproses..." : "Buat Chat"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -413,10 +413,9 @@ export const CustomerService = ({
   /**
    * Effect: Fetch ALL tickets SMARTLY when switching to 'ticketing' view
    *
-   * Strategy:
-   * 1. Active Tickets (Open): Fetch created in last 30 days (Backlog Control)
-   * 2. Active Tickets (In Progress): Fetch most recent 50 (Active Work)
-   * 3. Archive Tickets (Resolved/Closed): Fetch ONLY updated in last 7 days (Data Hygiene)
+   * Strategy Update:
+   * 1. Active (Open/In Progress): Fetch ALL (No date limit) so nothing is missed.
+   * 2. Archive (Resolved/Closed): Keep 30 days history (User Request).
    */
   useEffect(() => {
     if (viewMode !== "ticketing") return;
@@ -426,49 +425,44 @@ export const CustomerService = ({
         setIsKanbanLoading(true);
 
         const now = new Date();
-        // Time windows
-        const sevenDaysAgo = new Date(
-          now.getTime() - 7 * 24 * 60 * 60 * 1000
-        ).toISOString();
         const thirtyDaysAgo = new Date(
           now.getTime() - 30 * 24 * 60 * 60 * 1000
         ).toISOString();
 
-        // PARALLEL FETCHING: 4 Requests for 4 Columns
-        // We use the new sorting and date filter params
+        // PARALLEL FETCHING
         const [openRes, progressRes, resolvedRes, closedRes] =
           await Promise.all([
-            // 1. OPEN: Last 30 days, sorted by Creation Date
+            // 1. OPEN: Fetch ALL open tickets (Removed date limit)
             crmChatsService.getTickets({
               status_filter: "open",
-              limit: 50,
-              created_after: thirtyDaysAgo, // <--- 30 Day Window
+              limit: 100, // Increased limit to catch backlog
+              // created_after: thirtyDaysAgo, <--- REMOVED to show old tickets
               sort_by: "created_at",
               sort_order: "desc",
             }) as any,
 
-            // 2. IN PROGRESS: High limit, sorted by Last Update
+            // 2. IN PROGRESS: Fetch ALL work in progress
             crmChatsService.getTickets({
               status_filter: "in_progress",
-              limit: 50,
+              limit: 100,
               sort_by: "updated_at",
               sort_order: "desc",
             }) as any,
 
-            // 3. RESOLVED: Only last 7 days
+            // 3. RESOLVED: Last 30 days (Restored from 7 days)
             crmChatsService.getTickets({
               status_filter: "resolved",
               limit: 50,
-              updated_after: sevenDaysAgo, // <--- 7 Day Hygiene
+              updated_after: thirtyDaysAgo, // <--- 30 Days
               sort_by: "updated_at",
               sort_order: "desc",
             }) as any,
 
-            // 4. CLOSED: Only last 7 days
+            // 4. CLOSED: Last 30 days (Restored from 7 days)
             crmChatsService.getTickets({
               status_filter: "closed",
               limit: 50,
-              updated_after: sevenDaysAgo, // <--- 7 Day Hygiene
+              updated_after: thirtyDaysAgo, // <--- 30 Days
               sort_by: "updated_at",
               sort_order: "desc",
             }) as any,
@@ -1307,79 +1301,96 @@ export const CustomerService = ({
     assignedAgentId?: string;
   }) => {
     try {
+      // 1. BEST PRACTICE: Resolve "me" to UUID on Frontend
+      // This ensures we always send a valid UUID to the backend, regardless of backend validation rules.
+      let finalAgentId: string | null = null;
+      if (data.assignedAgentId === "me" && user?.id) {
+        finalAgentId = user.id;
+      } else if (
+        data.assignedAgentId &&
+        data.assignedAgentId !== "unassigned"
+      ) {
+        finalAgentId = data.assignedAgentId;
+      }
+
+      // 2. ATOMIC CREATE REQUEST
       const createdChat = await crmChatsService.createChat({
         customer_name: data.customerName,
         contact: data.contact,
         channel: data.channel,
         initial_message: data.initialMessage,
-        // The backend will now handle the "assigned_agent_id" logic internally
-        // if you updated the service as discussed previously.
-        assigned_agent_id: data.assignedAgentId,
+        assigned_agent_id: finalAgentId,
       });
 
-      // ============================================================
-      // NEW LOGIC: Smart Merge Handling
-      // ============================================================
-
-      // 1. Check if this chat ID already exists in our local state
+      // 3. UX: Handle "Existing Chat" logic
       const existingChat = chatsRef.current.find(
         (c) => c.id === createdChat.id
       );
 
-      if (existingChat) {
-        // SCENARIO A: Chat Exists (Merged)
-        console.log("🔀 Chat Merged/Found Existing:", createdChat.id);
+      // Whether existing or new, we want to set it as active
+      setActiveChat(createdChat.id);
 
-        // Just switch focus to the existing chat
-        setActiveChat(createdChat.id);
+      // 4. BEST PRACTICE: Optimistic Message Injection (The Fix for Ghost Message)
+      // We know we sent a message. We inject it locally so the user sees it immediately.
+      // We don't wait for the WebSocket to echo it back.
+      if (data.initialMessage) {
+        const optimisticMessage: Message = {
+          id: `temp-${Date.now()}`,
+          sender: "agent",
+          senderName: user?.user_metadata?.name || "Me",
+          content: data.initialMessage,
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          // No ticket ID yet, but that's fine for display
+        };
 
-        toast.info("Percakapan yang sudah ada ditemukan dan dibuka.", {
-          description: "Kontak ini telah digabungkan dengan customer yang ada.",
+        setCurrentChatMessages((prev) => {
+          // Prevent duplicates if WS was extremely fast
+          if (
+            prev.some(
+              (m) =>
+                m.content === data.initialMessage &&
+                m.timestamp === optimisticMessage.timestamp
+            )
+          )
+            return prev;
+          return [...prev, optimisticMessage];
         });
-        return; // STOP HERE, do not add duplicate to list
+
+        // Also update the sidebar preview
+        setChats((prev) => {
+          const others = prev.filter((c) => c.id !== createdChat.id);
+          const targetChat =
+            existingChat ||
+            ({
+              id: createdChat.id,
+              customerName: data.customerName,
+              // ... populate other fields default ...
+              status: "open",
+              messages: [],
+              unreadCount: 0,
+              createdDate: new Date().toLocaleDateString(),
+            } as Chat);
+
+          const updatedTarget = {
+            ...targetChat,
+            lastMessage: data.initialMessage,
+            timestamp: optimisticMessage.timestamp,
+            isAssigned: !!finalAgentId,
+          };
+
+          return [updatedTarget, ...others];
+        });
       }
 
-      // ============================================================
-      // SCENARIO B: New Chat (Proceed as usual)
-      // ============================================================
-
-      const assignedAgent = data.assignedAgentId
-        ? agents.find((a) => a.id === data.assignedAgentId)
-        : undefined;
-
-      const newChat: Chat = {
-        id: createdChat.id,
-        customerId: createdChat.customer_id,
-        customerName: data.customerName,
-        lastMessage: data.initialMessage,
-        timestamp: new Date(createdChat.created_at).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        unreadCount: 0,
-        isAssigned: !!data.assignedAgentId,
-        assignedTo: assignedAgent?.name || "-",
-        handledBy: data.assignedAgentId ? "human" : "unassigned",
-        channel: data.channel || "-",
-        // Use backend status if available, fallback to logic
-        status:
-          (createdChat.status as any) ||
-          (data.assignedAgentId ? "assigned" : "open"),
-        messages: [],
-        labels: [],
-        createdDate: new Date(createdChat.created_at).toLocaleDateString(),
-        tickets: [],
-        humanAgentId: data.assignedAgentId,
-        humanAgentName: assignedAgent?.name,
-      };
-
-      setChats((prevChats) => [newChat, ...prevChats]);
-      setActiveChat(createdChat.id);
-      toast.success("Chat baru berhasil dibuat!");
+      toast.success(
+        existingChat ? "Opened existing chat" : "Chat created successfully"
+      );
     } catch (error: any) {
       console.error("Error creating chat:", error);
       toast.error(error?.message || "Gagal membuat chat baru");
-      throw error;
     }
   };
 
@@ -1621,6 +1632,18 @@ export const CustomerService = ({
         open={newChatModalOpen}
         onClose={() => setNewChatModalOpen(false)}
         agents={agents}
+        // 🚀 NEW: Pass existing chats for duplicate detection
+        existingChats={chats.map((c) => ({
+          id: c.id,
+          customerName: c.customerName,
+          customerId: c.customerId,
+          contact: "", // Chat list summary usually doesn't have the raw phone number, so we default to empty and rely on ID/Name match
+        }))}
+        onOpenExistingChat={(id) => {
+          // If duplicate found, just open it and close modal
+          setActiveChat(id);
+          setNewChatModalOpen(false);
+        }}
         onCreateChat={handleCreateChat}
       />
     </div>

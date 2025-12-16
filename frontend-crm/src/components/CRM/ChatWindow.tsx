@@ -20,6 +20,9 @@ import {
   ArrowUp,
   CheckCircle2,
   Archive,
+  File as FileIcon,
+  X,
+  Image as ImageIcon,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -67,6 +70,12 @@ interface Message {
   content: string;
   timestamp: string;
   ticketId?: string;
+  // ADDED
+  attachment?: {
+    name: string;
+    url: string;
+    type: string;
+  };
 }
 
 /**
@@ -182,7 +191,7 @@ interface ChatWindowProps {
   messages: Message[];
   tickets?: Ticket[];
   isLoading?: boolean;
-  onSendMessage: (message: string) => void;
+  onSendMessage: (message: string, file?: File) => void;
   onAssignToAgent: () => void;
   onMarkResolved: () => void;
   onCreateTicket?: (
@@ -261,7 +270,8 @@ export const ChatWindow = ({
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [escalationReason, setEscalationReason] = useState("");
   const [isEscalating, setIsEscalating] = useState(false);
-
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   /** Ref to the end of messages container for auto-scrolling */
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -292,10 +302,32 @@ export const ChatWindow = ({
    * Validates input and calls parent handler to send message
    */
   const handleSend = () => {
-    if (messageInput.trim()) {
-      onSendMessage(messageInput);
+    // MODIFIED: Check for selectedFile as well
+    if (messageInput.trim() || selectedFile) {
+      onSendMessage(messageInput, selectedFile || undefined);
       setMessageInput("");
+      setSelectedFile(null); // ADDED: Clear file state
+      // ADDED: Reset file input value to allow selecting the same file again
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  };
+
+  // ADDED: Triggers the hidden file input
+  const handlePaperclipClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  // ADDED: Handles file selection from the input
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  // ADDED: Clears the selected file
+  const removeSelectedFile = () => {
+    setSelectedFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   /**

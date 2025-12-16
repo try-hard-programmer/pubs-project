@@ -1,8 +1,14 @@
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -10,7 +16,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from '@/components/ui/table';
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -19,11 +25,11 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useUserManagement } from '@/hooks/useUserManagement';
-import { toast } from 'sonner';
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useUserManagement } from "@/hooks/useUserManagement";
+import { toast } from "sonner";
 import {
   UserPlus,
   Users,
@@ -34,12 +40,12 @@ import {
   RefreshCw,
   Copy,
   ArrowLeft,
-} from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+} from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 export const UserManagement = () => {
   const navigate = useNavigate();
-  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteEmail, setInviteEmail] = useState("");
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
 
   const {
@@ -55,73 +61,85 @@ export const UserManagement = () => {
 
   const handleSendInvitation = async () => {
     if (!inviteEmail) {
-      toast.error('Please enter an email address');
+      toast.error("Please enter an email address");
       return;
     }
 
     try {
       const result = await sendInvitation(inviteEmail);
-      toast.success('Invitation sent successfully!');
+      toast.success("Invitation sent successfully!");
 
       // Show invitation link for testing
       if (result.invitationLink) {
-        toast.info('Invitation link copied to clipboard', {
-          description: 'You can share this link directly',
+        toast.info("Invitation link copied to clipboard", {
+          description: "You can share this link directly",
         });
         navigator.clipboard.writeText(result.invitationLink);
       }
 
-      setInviteEmail('');
+      setInviteEmail("");
       setIsInviteDialogOpen(false);
     } catch (error: any) {
-      toast.error(error.message || 'Failed to send invitation');
+      toast.error(error.message || "Failed to send invitation");
     }
   };
 
   const handleCancelInvitation = async (invitationId: string) => {
     try {
       await cancelInvitation(invitationId);
-      toast.success('Invitation cancelled');
+      toast.success("Invitation cancelled");
     } catch (error: any) {
-      toast.error(error.message || 'Failed to cancel invitation');
+      toast.error(error.message || "Failed to cancel invitation");
     }
   };
 
   const handleResendInvitation = async (email: string) => {
     try {
       await resendInvitation(email);
-      toast.success('Invitation resent successfully!');
+      toast.success("Invitation resent successfully!");
     } catch (error: any) {
-      toast.error(error.message || 'Failed to resend invitation');
+      toast.error(error.message || "Failed to resend invitation");
     }
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'pending':
+      case "pending":
         return (
-          <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
             <Clock className="w-3 h-3 mr-1" />
             Pending
           </Badge>
         );
-      case 'accepted':
+      case "accepted":
         return (
-          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
             <CheckCircle2 className="w-3 h-3 mr-1" />
             Accepted
           </Badge>
         );
-      case 'expired':
+      case "expired":
         return (
-          <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
             <XCircle className="w-3 h-3 mr-1" />
             Expired
           </Badge>
         );
-      case 'cancelled':
+      case "cancelled":
         return (
-          <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200"
+          >
             <XCircle className="w-3 h-3 mr-1" />
             Cancelled
           </Badge>
@@ -133,24 +151,27 @@ export const UserManagement = () => {
 
   const getRoleBadge = (role: string) => {
     const colors = {
-      admin: 'bg-purple-100 text-purple-800 border-purple-200',
-      moderator: 'bg-blue-100 text-blue-800 border-blue-200',
-      user: 'bg-gray-100 text-gray-800 border-gray-200',
+      admin: "bg-purple-100 text-purple-800 border-purple-200",
+      moderator: "bg-blue-100 text-blue-800 border-blue-200",
+      user: "bg-gray-100 text-gray-800 border-gray-200",
     };
     return (
-      <Badge variant="outline" className={colors[role as keyof typeof colors] || ''}>
+      <Badge
+        variant="outline"
+        className={colors[role as keyof typeof colors] || ""}
+      >
         {role}
       </Badge>
     );
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('id-ID', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return new Date(dateString).toLocaleDateString("id-ID", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -160,15 +181,22 @@ export const UserManagement = () => {
       <header className="bg-card border-b px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" onClick={() => navigate('/')}>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}>
               <ArrowLeft className="w-4 h-4" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-              <p className="text-muted-foreground">Manage user invitations and downlines</p>
+              <h1 className="text-2xl font-bold text-foreground">
+                User Management
+              </h1>
+              <p className="text-muted-foreground">
+                Manage user invitations and downlines
+              </p>
             </div>
           </div>
-          <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
+          <Dialog
+            open={isInviteDialogOpen}
+            onOpenChange={setIsInviteDialogOpen}
+          >
             <DialogTrigger asChild>
               <Button>
                 <UserPlus className="w-4 h-4 mr-2" />
@@ -192,7 +220,7 @@ export const UserManagement = () => {
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === "Enter") {
                         handleSendInvitation();
                       }
                     }}
@@ -200,11 +228,17 @@ export const UserManagement = () => {
                 </div>
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsInviteDialogOpen(false)}>
+                <Button
+                  variant="outline"
+                  onClick={() => setIsInviteDialogOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button onClick={handleSendInvitation} disabled={sendingInvitation}>
-                  {sendingInvitation ? 'Sending...' : 'Send Invitation'}
+                <Button
+                  onClick={handleSendInvitation}
+                  disabled={sendingInvitation}
+                >
+                  {sendingInvitation ? "Sending..." : "Send Invitation"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -232,14 +266,17 @@ export const UserManagement = () => {
               <CardHeader>
                 <CardTitle>Your Downlines</CardTitle>
                 <CardDescription>
-                  Users who accepted your invitation and are part of your network
+                  Users who accepted your invitation and are part of your
+                  network
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 {isLoadingDownlines ? (
                   <div className="text-center py-8">
                     <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Loading downlines...</p>
+                    <p className="text-muted-foreground">
+                      Loading downlines...
+                    </p>
                   </div>
                 ) : downlines && downlines.length > 0 ? (
                   <Table>
@@ -253,9 +290,13 @@ export const UserManagement = () => {
                     <TableBody>
                       {downlines.map((downline) => (
                         <TableRow key={downline.user_id}>
-                          <TableCell className="font-medium">{downline.email}</TableCell>
+                          <TableCell className="font-medium">
+                            {downline.email}
+                          </TableCell>
                           <TableCell>{getRoleBadge(downline.role)}</TableCell>
-                          <TableCell>{formatDate(downline.created_at)}</TableCell>
+                          <TableCell>
+                            {formatDate(downline.created_at)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -288,7 +329,9 @@ export const UserManagement = () => {
                 {isLoadingInvitations ? (
                   <div className="text-center py-8">
                     <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-muted-foreground">Loading invitations...</p>
+                    <p className="text-muted-foreground">
+                      Loading invitations...
+                    </p>
                   </div>
                 ) : invitations && invitations.length > 0 ? (
                   <Table>
@@ -307,22 +350,28 @@ export const UserManagement = () => {
                           <TableCell className="font-medium">
                             {invitation.invited_email}
                           </TableCell>
-                          <TableCell>{getStatusBadge(invitation.status)}</TableCell>
-                          <TableCell>{formatDate(invitation.created_at)}</TableCell>
+                          <TableCell>
+                            {getStatusBadge(invitation.status)}
+                          </TableCell>
+                          <TableCell>
+                            {formatDate(invitation.created_at)}
+                          </TableCell>
                           <TableCell>
                             {new Date(invitation.expires_at) > new Date()
                               ? formatDate(invitation.expires_at)
-                              : 'Expired'}
+                              : "Expired"}
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-2">
-                              {invitation.status === 'pending' && (
+                              {invitation.status === "pending" && (
                                 <>
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() =>
-                                      handleResendInvitation(invitation.invited_email)
+                                      handleResendInvitation(
+                                        invitation.invited_email
+                                      )
                                     }
                                   >
                                     <RefreshCw className="w-4 h-4" />
@@ -331,9 +380,11 @@ export const UserManagement = () => {
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => {
-                                      const link = `${window.location.origin}/accept-invitation?token=${invitation.invitation_token}`;
+                                      const link = `${window.location.origin}/#/accept-invitation?token=${invitation.invitation_token}`;
                                       navigator.clipboard.writeText(link);
-                                      toast.success('Invitation link copied to clipboard');
+                                      toast.success(
+                                        "Invitation link copied to clipboard"
+                                      );
                                     }}
                                   >
                                     <Copy className="w-4 h-4" />
@@ -341,7 +392,9 @@ export const UserManagement = () => {
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => handleCancelInvitation(invitation.id)}
+                                    onClick={() =>
+                                      handleCancelInvitation(invitation.id)
+                                    }
                                   >
                                     <XCircle className="w-4 h-4 text-destructive" />
                                   </Button>

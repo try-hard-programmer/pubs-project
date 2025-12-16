@@ -84,7 +84,7 @@ export const CreateTicketDialog = ({
       newErrors.description =
         "Please provide more detail (at least 10 characters)";
     } else if (desc.length > 300) {
-      newErrors.description = "Description is too long (max 500 characters)";
+      newErrors.description = "Description is too long (max 300 characters)";
     }
 
     // Category Validation
@@ -134,6 +134,7 @@ export const CreateTicketDialog = ({
               id="title"
               placeholder="e.g. Login page is not loading"
               value={formData.title}
+              maxLength={100}
               onChange={(e) => handleChange("title", e.target.value)}
               className={
                 errors.title ? "border-red-500 focus-visible:ring-red-500" : ""
@@ -158,6 +159,7 @@ export const CreateTicketDialog = ({
               placeholder="Please describe the issue in detail..."
               rows={4}
               value={formData.description}
+              maxLength={300}
               onChange={(e) => handleChange("description", e.target.value)}
               className={
                 errors.description
