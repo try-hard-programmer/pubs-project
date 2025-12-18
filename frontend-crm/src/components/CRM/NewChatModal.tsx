@@ -25,18 +25,13 @@ import {
   Mail,
   Globe,
   Loader2,
-  User,
   Search,
-  CheckCircle2,
-  AlertCircle,
-  Info,
 } from "lucide-react";
 import {
   type CommunicationChannel,
   type Customer,
   getCustomers,
 } from "@/services/crmChatsService";
-import { cn } from "@/lib/utils";
 
 export interface ExistingChatSnippet {
   id: string;
@@ -133,7 +128,6 @@ export const NewChatModal = ({
     }
   }, [open]);
 
-  // --- BEST PRACTICE: STRICT FILTERING IN SEARCH ---
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -146,7 +140,6 @@ export const NewChatModal = ({
       try {
         const results = await getCustomers({ search: searchQuery, limit: 10 });
 
-        // 🛡️ FILTER: Only show customers valid for the selected channel
         const filteredResults = results.filter((customer) => {
           if (channel === "whatsapp") return !!customer.phone;
           if (channel === "telegram")
@@ -166,10 +159,9 @@ export const NewChatModal = ({
     return () => {
       if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
-  }, [searchQuery, channel]); // Re-run if channel changes
+  }, [searchQuery, channel]);
 
   const handleSelectCustomer = (customer: Customer) => {
-    // Double check (Guard Clause)
     let isValid = true;
     if (channel === "whatsapp" && !customer.phone) isValid = false;
     else if (channel === "email" && !customer.email) isValid = false;
@@ -191,33 +183,63 @@ export const NewChatModal = ({
     setSelectedCustomer(customer);
     setSearchQuery("");
     setSearchResults([]);
-    setErrors({});
+    setErrors((prev) => ({ ...prev, selection: "" }));
   };
 
   const hasEmoji = (str: string) =>
     /(\p{Extended_Pictographic}|\p{Emoji_Presentation})/gu.test(str);
 
+  const handleNameChange = (value: string) => {
+    if (hasEmoji(value)) {
+      setErrors((prev) => ({
+        ...prev,
+        customerName: "Nama tidak boleh mengandung emoticon",
+      }));
+      return;
+    }
+    setManualName(value);
+    setErrors((prev) => ({ ...prev, customerName: "" }));
+  };
+
+  const handleContactChange = (value: string) => {
+    if (hasEmoji(value)) {
+      setErrors((prev) => ({
+        ...prev,
+        contact: "Kontak tidak boleh mengandung emoticon",
+      }));
+      return;
+    }
+    setManualContact(value);
+    setErrors((prev) => ({ ...prev, contact: "" }));
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
-    if (activeTab === "manual") {
-      if (channel === "telegram")
-        newErrors.selection = "Manual input not allowed for Telegram";
-      if (!manualName.trim()) newErrors.customerName = "Nama wajib diisi";
-      else if (hasEmoji(manualName))
-        newErrors.customerName = "Nama tidak boleh emoticon";
 
-      if (!manualContact.trim()) newErrors.contact = "Kontak wajib diisi";
-      else if (hasEmoji(manualContact))
-        newErrors.contact = "Kontak tidak boleh emoticon";
+    if (activeTab === "manual") {
+      if (channel === "telegram") {
+        newErrors.selection = "Manual input tidak diperbolehkan untuk Telegram";
+      }
+      if (!manualName.trim()) {
+        newErrors.customerName = "Nama wajib diisi";
+      } else if (hasEmoji(manualName)) {
+        newErrors.customerName = "Nama tidak boleh mengandung emoticon";
+      }
+
+      if (!manualContact.trim()) {
+        newErrors.contact = "Kontak wajib diisi";
+      } else if (hasEmoji(manualContact)) {
+        newErrors.contact = "Kontak tidak boleh mengandung emoticon";
+      }
     } else {
-      if (!selectedCustomer)
+      if (!selectedCustomer) {
         newErrors.selection = "Pilih customer dari database";
+      }
     }
 
-    if (!initialMessage.trim())
+    if (!initialMessage.trim()) {
       newErrors.initialMessage = "Pesan awal wajib diisi";
-    else if (hasEmoji(initialMessage))
-      newErrors.initialMessage = "Pesan tidak boleh emoticon";
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -247,7 +269,6 @@ export const NewChatModal = ({
       if (channel === "whatsapp" && finalContact.startsWith("+"))
         finalContact = finalContact.replace(/^\+/, "");
 
-      // Non-Blocking Duplicate Check
       const cleanNew = finalContact.replace(/[^a-zA-Z0-9]/g, "");
       const duplicate = existingChats.find((c) => {
         if (selectedCustomer?.id && c.customerId === selectedCustomer.id)
@@ -257,7 +278,7 @@ export const NewChatModal = ({
       });
 
       if (duplicate && onOpenExistingChat) {
-        onOpenExistingChat(duplicate.id); // UX Switch
+        onOpenExistingChat(duplicate.id);
       }
 
       await onCreateChat({
@@ -302,21 +323,21 @@ export const NewChatModal = ({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Channel */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Channel</Label>
+          <div className="space-y-2">
+            <Label>Channel</Label>
             <Select
               value={channel}
               onValueChange={(v) => {
                 setChannel(v as any);
                 setSelectedCustomer(null);
+                setErrors({});
                 if (v === "telegram") setActiveTab("existing");
               }}
               disabled={isCreating}
             >
-              <SelectTrigger className="col-span-3">
+              <SelectTrigger>
                 <SelectValue>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
                     <ChannelIcon className="w-4 h-4" />
                     {selectedChannel?.label}
                   </div>
@@ -325,66 +346,65 @@ export const NewChatModal = ({
               <SelectContent>
                 {channels.map((ch) => (
                   <SelectItem key={ch.value} value={ch.value}>
-                    {ch.label}
+                    <div className="flex gap-2 items-center">
+                      <ch.icon className="w-4 h-4" />
+                      {ch.label}
+                    </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          {/* Tabs */}
           <Tabs
             value={activeTab}
             onValueChange={(v) => {
-              if (channel !== "telegram") setActiveTab(v as any);
+              if (channel !== "telegram") {
+                setActiveTab(v as any);
+                setErrors({});
+              }
             }}
             className="w-full"
           >
-            <div className="grid grid-cols-4 gap-4">
-              <Label className="text-right pt-2">Metode</Label>
-              <div className="col-span-3">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="existing">Cari Database</TabsTrigger>
-                  <TabsTrigger
-                    value="manual"
-                    disabled={channel === "telegram"}
-                    className={channel === "telegram" ? "opacity-50" : ""}
-                  >
-                    Input Manual
-                  </TabsTrigger>
-                </TabsList>
-                {channel === "telegram" && (
-                  <p className="text-[10px] text-amber-600 mt-2">
-                    Telegram butuh ID valid (Existing Customer).
-                  </p>
-                )}
-              </div>
+            <div className="space-y-2">
+              <Label>Metode Input</Label>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="existing">Cari Database</TabsTrigger>
+                <TabsTrigger value="manual" disabled={channel === "telegram"}>
+                  Input Manual
+                </TabsTrigger>
+              </TabsList>
+              {channel === "telegram" && (
+                <p className="text-xs text-amber-600">
+                  Telegram membutuhkan ID valid dari database existing customer
+                </p>
+              )}
             </div>
 
-            <TabsContent value="existing" className="mt-4 space-y-4">
-              <div className="grid grid-cols-4 items-start gap-4">
-                <Label className="text-right pt-2.5">Customer</Label>
-                <div className="col-span-3 relative">
-                  {!selectedCustomer ? (
-                    <>
-                      <Input
-                        placeholder={`Cari customer ${selectedChannel?.label}...`}
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-9"
-                      />
-                      <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
-                      {isSearching && (
-                        <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin" />
-                      )}
-                      {searchResults.length > 0 && (
-                        <div className="absolute top-full mt-1 w-full bg-popover border rounded-md shadow-lg z-50 max-h-[200px] overflow-auto">
-                          {searchResults.map((c) => (
-                            <div
-                              key={c.id}
-                              className="p-2 hover:bg-accent cursor-pointer flex justify-between"
-                              onClick={() => handleSelectCustomer(c)}
-                            >
+            <TabsContent value="existing" className="mt-4 space-y-2">
+              <Label>Customer</Label>
+              <div className="relative">
+                {!selectedCustomer ? (
+                  <>
+                    <Input
+                      placeholder={`Cari nama atau kontak customer...`}
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted-foreground" />
+                    {isSearching && (
+                      <Loader2 className="absolute right-3 top-2.5 w-4 h-4 animate-spin" />
+                    )}
+                    {searchResults.length > 0 && (
+                      <div className="absolute top-full mt-1 w-full bg-popover border rounded-md shadow-lg z-50 max-h-[200px] overflow-auto">
+                        {searchResults.map((c) => (
+                          <div
+                            key={c.id}
+                            className="p-3 hover:bg-accent cursor-pointer"
+                            onClick={() => handleSelectCustomer(c)}
+                          >
+                            <div className="flex justify-between items-center">
                               <div className="text-sm font-medium">
                                 {c.name}
                               </div>
@@ -394,69 +414,83 @@ export const NewChatModal = ({
                                   : c.phone || c.metadata?.telegram_id}
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="flex justify-between p-2 border rounded bg-green-50">
-                      <span className="text-sm font-medium">
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="flex justify-between items-center p-3 border rounded bg-green-50">
+                    <div>
+                      <div className="text-sm font-medium">
                         {selectedCustomer.name}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedCustomer(null)}
-                      >
-                        Ganti
-                      </Button>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {channel === "email"
+                          ? selectedCustomer.email
+                          : selectedCustomer.phone ||
+                            selectedCustomer.metadata?.telegram_id}
+                      </div>
                     </div>
-                  )}
-                  {errors.selection && (
-                    <p className="text-xs text-red-500 mt-1">
-                      {errors.selection}
-                    </p>
-                  )}
-                </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedCustomer(null);
+                        setErrors((prev) => ({ ...prev, selection: "" }));
+                      }}
+                    >
+                      Ganti
+                    </Button>
+                  </div>
+                )}
               </div>
+              {errors.selection && (
+                <p className="text-xs text-red-500">{errors.selection}</p>
+              )}
             </TabsContent>
 
             <TabsContent value="manual" className="mt-4 space-y-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Nama</Label>
+              <div className="space-y-2">
+                <Label>Nama Customer</Label>
                 <Input
-                  className="col-span-3"
                   value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
+                  onChange={(e) => handleNameChange(e.target.value)}
+                  placeholder="Masukkan nama customer..."
+                  disabled={isCreating}
                 />
+                {errors.customerName && (
+                  <p className="text-xs text-red-500">{errors.customerName}</p>
+                )}
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Kontak</Label>
+
+              <div className="space-y-2">
+                <Label>Kontak</Label>
                 <Input
-                  className="col-span-3"
                   value={manualContact}
-                  onChange={(e) => setManualContact(e.target.value)}
+                  onChange={(e) => handleContactChange(e.target.value)}
                   placeholder={selectedChannel?.placeholder}
+                  disabled={isCreating}
                 />
+                {errors.contact && (
+                  <p className="text-xs text-red-500">{errors.contact}</p>
+                )}
               </div>
-              {(errors.customerName || errors.contact) && (
-                <p className="text-xs text-red-500 text-right">
-                  {errors.customerName || errors.contact}
-                </p>
-              )}
             </TabsContent>
           </Tabs>
 
-          {/* Assign & Message */}
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label className="text-right">Assign</Label>
-            <Select value={assignedAgentId} onValueChange={setAssignedAgentId}>
-              <SelectTrigger className="col-span-3">
+          <div className="space-y-2">
+            <Label>Assign ke Agent</Label>
+            <Select
+              value={assignedAgentId}
+              onValueChange={setAssignedAgentId}
+              disabled={isCreating}
+            >
+              <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned">Tidak assign (AI)</SelectItem>
-                {/* Removed Assign to Me option */}
                 {agents
                   .filter((agent) => agent.status === "active")
                   .map((agent) => (
@@ -468,29 +502,39 @@ export const NewChatModal = ({
             </Select>
           </div>
 
-          <div className="grid grid-cols-4 items-start gap-4">
-            <Label className="text-right pt-2">Pesan</Label>
-            <div className="col-span-3">
-              <Textarea
-                value={initialMessage}
-                onChange={(e) => setInitialMessage(e.target.value)}
-                rows={3}
-              />
-              {errors.initialMessage && (
-                <p className="text-xs text-red-500 mt-1">
-                  {errors.initialMessage}
-                </p>
-              )}
-            </div>
+          <div className="space-y-2">
+            <Label>Pesan Awal</Label>
+            <Textarea
+              value={initialMessage}
+              onChange={(e) => {
+                setInitialMessage(e.target.value);
+                if (e.target.value.trim()) {
+                  setErrors((prev) => ({ ...prev, initialMessage: "" }));
+                }
+              }}
+              rows={3}
+              placeholder="Tulis pesan pembuka untuk customer..."
+              disabled={isCreating}
+            />
+            {errors.initialMessage && (
+              <p className="text-xs text-red-500">{errors.initialMessage}</p>
+            )}
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose}>
+          <Button variant="outline" onClick={handleClose} disabled={isCreating}>
             Batal
           </Button>
           <Button onClick={handleSubmit} disabled={isCreating}>
-            {isCreating ? "Memproses..." : "Buat Chat"}
+            {isCreating ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Memproses...
+              </>
+            ) : (
+              "Buat Chat"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

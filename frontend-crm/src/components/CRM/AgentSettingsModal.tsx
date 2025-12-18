@@ -131,6 +131,22 @@ interface AgentSettingsModalProps {
   onSave: (agentId: string, settings: AgentSettings) => void;
 }
 
+const PREDEFINED_TICKET_CATEGORIES = [
+  { value: "ac", label: "AC" },
+  { value: "air", label: "Air" },
+  { value: "elektronik", label: "Elektronik" },
+  { value: "gas", label: "Gas" },
+  { value: "gedung", label: "Gedung" },
+  { value: "infrastruktur", label: "Infrastruktur" },
+  { value: "internet", label: "Internet" },
+  { value: "keamanan", label: "Keamanan" },
+  { value: "kebersihan", label: "Kebersihan" },
+  { value: "listrik", label: "Listrik" },
+  { value: "sanitasi", label: "Sanitasi" },
+  { value: "telepon", label: "Telepon" },
+  { value: "tv_kabel", label: "TV Kabel" },
+];
+
 export const AgentSettingsModal = ({
   open,
   onClose,
@@ -504,6 +520,16 @@ export const AgentSettingsModal = ({
 
   const handleAddCategory = () => {
     if (newCategory.trim()) {
+      // Check if exists (case-insensitive)
+      if (
+        settings.ticketing.categories.some(
+          (c) => c.toLowerCase() === newCategory.trim().toLowerCase()
+        )
+      ) {
+        toast.error("Kategori sudah ada");
+        return;
+      }
+
       setSettings((prev) => ({
         ...prev,
         ticketing: {
@@ -548,6 +574,23 @@ export const AgentSettingsModal = ({
         return "Responses lebih variatif dan creative. Cocok untuk conversational dan brainstorming.";
       default:
         return "";
+    }
+  };
+
+  // Handler for selecting from predefined list
+  const handleAddPredefinedCategory = (value: string) => {
+    // Prevent duplicates
+    if (!settings.ticketing.categories.includes(value)) {
+      setSettings((prev) => ({
+        ...prev,
+        ticketing: {
+          ...prev.ticketing,
+          categories: [...prev.ticketing.categories, value],
+        },
+      }));
+      toast.success(`Kategori "${value}" ditambahkan`);
+    } else {
+      toast.info(`Kategori "${value}" sudah ada`);
     }
   };
 
@@ -1545,37 +1588,66 @@ export const AgentSettingsModal = ({
                         </div>
 
                         {/* Ticket Categories */}
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                           <Label>Ticket Categories</Label>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="Tambah kategori baru..."
-                              value={newCategory}
-                              onChange={(e) => setNewCategory(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  handleAddCategory();
-                                }
-                              }}
-                            />
-                            <Button type="button" onClick={handleAddCategory}>
-                              <Plus className="h-4 w-4" />
-                            </Button>
+                          <div className="space-y-2">
+                            {/* 1. Predefined Dropdown */}
+                            <Select onValueChange={handleAddPredefinedCategory}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Pilih kategori standar (e.g. AC, Listrik)" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {PREDEFINED_TICKET_CATEGORIES.map((cat) => (
+                                  <SelectItem
+                                    key={cat.value}
+                                    value={cat.value}
+                                    disabled={settings.ticketing.categories.includes(
+                                      cat.value
+                                    )}
+                                  >
+                                    {cat.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            {/* 2. Custom Input (Existing) */}
+                            <div className="flex gap-2">
+                              <Input
+                                placeholder="Atau ketik kategori custom..."
+                                value={newCategory}
+                                onChange={(e) => setNewCategory(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleAddCategory();
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                variant="default"
+                                onClick={handleAddCategory}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
+
+                          {/* 3. Selected Categories List (Badges) */}
                           <div className="flex flex-wrap gap-2 mt-2">
                             {settings.ticketing.categories.map(
                               (category, index) => (
                                 <Badge
                                   key={index}
                                   variant="secondary"
-                                  className="gap-1"
+                                  className="gap-1 px-3 py-1"
                                 >
                                   {category}
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveCategory(index)}
-                                    className="ml-1 hover:text-red-500"
+                                    className="ml-1 hover:text-red-500 rounded-full hover:bg-red-100 p-0.5 transition-colors"
                                   >
                                     <X className="h-3 w-3" />
                                   </button>
@@ -1584,8 +1656,8 @@ export const AgentSettingsModal = ({
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
-                            Kategori ini akan digunakan untuk mengklasifikasikan
-                            ticket.
+                            Pilih dari list standar atau tambah kategori custom
+                            untuk klasifikasi ticket.
                           </p>
                         </div>
 

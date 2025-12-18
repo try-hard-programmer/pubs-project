@@ -229,6 +229,21 @@ export type Database = {
         };
         Returns: boolean;
       };
+      // ADDED: Missing RPC function definitions
+      create_user_invitation: {
+        Args: {
+          p_email: string;
+          p_invited_by: string;
+        };
+        Returns: string;
+      };
+      accept_invitation: {
+        Args: {
+          p_token: string;
+          p_user_id: string;
+        };
+        Returns: boolean;
+      };
     };
     Enums: {
       app_role: "admin" | "moderator" | "user";
