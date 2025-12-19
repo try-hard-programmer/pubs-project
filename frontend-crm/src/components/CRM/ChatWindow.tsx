@@ -14,15 +14,13 @@ import {
   Video,
   Info,
   Ticket as TicketIcon,
-  ChevronLeft,
-  ChevronRight,
   Loader2,
   ArrowUp,
   CheckCircle2,
   Archive,
   File as FileIcon,
   X,
-  Image as ImageIcon,
+  Download,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -51,17 +49,6 @@ import { TicketPanel } from "./TicketPanel";
 
 /**
  * Message interface (mapped from API response)
- *
- * Represents a single chat message from the API.
- * Data transformation from API happens in parent component (CustomerService.tsx)
- *
- * @interface Message
- * @property {string} id - Unique message identifier
- * @property {string} sender - Message sender type (from API: sender_type)
- * @property {string} senderName - Display name of sender (from API: sender_name)
- * @property {string} content - Message content text
- * @property {string} timestamp - Formatted timestamp (from API: created_at, formatted)
- * @property {string} [ticketId] - Optional ticket ID if message linked to ticket (from API: ticket_id)
  */
 interface Message {
   id: string;
@@ -70,7 +57,6 @@ interface Message {
   content: string;
   timestamp: string;
   ticketId?: string;
-  // ADDED
   attachment?: {
     name: string;
     url: string;
@@ -80,22 +66,6 @@ interface Message {
 
 /**
  * Ticket interface for support tickets
- *
- * @interface Ticket
- * @property {string} id - Unique ticket identifier
- * @property {string} ticketNumber - Human-readable ticket number (e.g., TKT-001)
- * @property {string} title - Ticket title/summary
- * @property {string} description - Detailed description of the issue
- * @property {string} category - Ticket category/type
- * @property {string} priority - Priority level: low, medium, high, or urgent
- * @property {string} status - Current ticket status
- * @property {string} createdAt - Creation timestamp
- * @property {string} updatedAt - Last update timestamp
- * @property {string} [resolvedAt] - Resolution timestamp (if resolved)
- * @property {string} [closedAt] - Closure timestamp (if closed)
- * @property {string} [assignedTo] - Name of assigned agent
- * @property {string[]} [tags] - Optional ticket tags for categorization
- * @property {string[]} relatedMessages - Array of message IDs related to this ticket
  */
 interface Ticket {
   id: string;
@@ -116,13 +86,6 @@ interface Ticket {
 
 /**
  * Agent interface for human agents
- *
- * @interface Agent
- * @property {string} id - Agent unique identifier
- * @property {string} name - Agent full name
- * @property {string} email - Agent email address
- * @property {string} phone - Agent phone number
- * @property {string} status - Agent availability status
  */
 interface Agent {
   id: string;
@@ -134,42 +97,6 @@ interface Agent {
 
 /**
  * Props for ChatWindow component
- *
- * ChatWindow is a presentational component that receives all data and handlers from parent.
- * No API calls are made directly in this component.
- *
- * @interface ChatWindowProps
- *
- * Chat Identification:
- * @property {string | null} chatId - ID of current chat (null if no chat selected)
- * @property {string} customerName - Name of the customer
- *
- * Assignment Status (Legacy):
- * @property {boolean} isAssigned - Whether chat is assigned to human agent
- * @property {string} [assignedTo] - Name of assigned agent
- *
- * Dual Agent Tracking:
- * @property {string} [aiAgentName] - Name of AI agent handling chat
- * @property {string} [humanAgentName] - Name of human agent handling chat
- * @property {string} handledBy - Current handler: ai, human, or unassigned
- * @property {string} [escalatedAt] - Timestamp when chat was escalated
- * @property {string} [escalationReason] - Reason for escalation
- *
- * Data Collections:
- * @property {Agent[]} agents - Available agents for escalation
- * @property {Message[]} messages - Chat messages (from API, transformed by parent)
- * @property {Ticket[]} [tickets] - Related tickets (optional)
- *
- * UI State:
- * @property {boolean} [isLoading] - Loading state for messages
- *
- * Event Handlers (managed by parent component - CustomerService.tsx):
- * @property {function} onSendMessage - Handler for sending new messages
- * @property {function} onAssignToAgent - Handler for agent self-assignment
- * @property {function} onMarkResolved - Handler for marking chat as resolved
- * @property {function} onEscalateToHuman - Handler for escalating chat to human agent
- * @property {function} [onCreateTicket] - Handler for creating new tickets
- * @property {function} [onUpdateTicket] - Handler for updating existing tickets
  */
 interface ChatWindowProps {
   chatId: string | null;
@@ -177,9 +104,9 @@ interface ChatWindowProps {
   status: "open" | "pending" | "assigned" | "resolved" | "closed";
   isAssigned: boolean;
   assignedTo?: string;
-  isOwnChat: boolean; // NEW: Whether this chat belongs to the current logged-in user
+  isOwnChat: boolean;
 
-  // NEW: Dual agent tracking
+  // Dual agent tracking
   aiAgentName?: string;
   humanAgentName?: string;
   handledBy: "ai" | "human" | "unassigned";
@@ -207,34 +134,6 @@ interface ChatWindowProps {
  * ============================================================================
  * ChatWindow Component
  * ============================================================================
- *
- * Presentational component for displaying chat interface.
- * Handles message display, input, and ticket panel.
- *
- * Features:
- * - Real-time message display with sender avatars
- * - Dual agent tracking (AI + Human) badges and information
- * - Message input with keyboard shortcuts (Enter to send, Shift+Enter for new line)
- * - Ticket panel slide-in from right
- * - Chat escalation dialog for transferring AI chats to human agents
- * - Empty states and loading states
- * - Customer profile header with actions
- *
- * Data Flow:
- * - Receives all data via props from parent component (CustomerService.tsx)
- * - No direct API calls in this component
- * - All data mutations handled by parent through callback props
- * - Messages already transformed from API format by parent
- *
- * Design Pattern:
- * - Presentational Component (no business logic)
- * - Container/Presentational Pattern
- * - Parent (CustomerService) = Container
- * - ChatWindow = Presentational
- *
- * @component
- * @param {ChatWindowProps} props - Component props
- * @returns {JSX.Element} Rendered chat window interface
  */
 export const ChatWindow = ({
   chatId,
@@ -243,12 +142,10 @@ export const ChatWindow = ({
   isAssigned,
   assignedTo,
   isOwnChat,
-  // NEW: Dual agent tracking
   aiAgentName,
   humanAgentName,
   handledBy,
   escalatedAt,
-  // escalationReason,
   agents,
   onEscalateToHuman,
   messages,
@@ -271,23 +168,16 @@ export const ChatWindow = ({
   const [escalationReason, setEscalationReason] = useState("");
   const [isEscalating, setIsEscalating] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Ref for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
-  /** Ref to the end of messages container for auto-scrolling */
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // ==========================================================================
   // AUTO-SCROLL EFFECT
   // ==========================================================================
 
-  /**
-   * Auto-scroll to bottom when messages change
-   * Triggers when:
-   * - New messages arrive
-   * - Chat is loaded for the first time
-   * - Loading state changes to false (chat finished loading)
-   */
   useEffect(() => {
-    // Scroll to bottom after messages render
     if (messagesEndRef.current && !isLoading) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
@@ -297,45 +187,31 @@ export const ChatWindow = ({
   // EVENT HANDLERS
   // ==========================================================================
 
-  /**
-   * Handle sending a message
-   * Validates input and calls parent handler to send message
-   */
   const handleSend = () => {
-    // MODIFIED: Check for selectedFile as well
     if (messageInput.trim() || selectedFile) {
       onSendMessage(messageInput, selectedFile || undefined);
       setMessageInput("");
-      setSelectedFile(null); // ADDED: Clear file state
-      // ADDED: Reset file input value to allow selecting the same file again
+      setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  // ADDED: Triggers the hidden file input
   const handlePaperclipClick = () => {
+    // This will now work because the input is rendered below
     fileInputRef.current?.click();
   };
 
-  // ADDED: Handles file selection from the input
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setSelectedFile(e.target.files[0]);
     }
   };
 
-  // ADDED: Clears the selected file
   const removeSelectedFile = () => {
     setSelectedFile(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  /**
-   * Handle Enter key press for sending message
-   * - Enter: Send message
-   * - Shift+Enter: New line in message
-   * @param {React.KeyboardEvent} e - Keyboard event
-   */
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
@@ -343,11 +219,6 @@ export const ChatWindow = ({
     }
   };
 
-  /**
-   * Handle chat escalation to human agent
-   * Validates selection and calls parent handler
-   * Shows loading state during escalation
-   */
   const handleEscalate = async () => {
     if (!selectedAgentId) return;
 
@@ -358,24 +229,71 @@ export const ChatWindow = ({
       setSelectedAgentId("");
       setEscalationReason("");
     } catch (error) {
-      // Error already handled by parent component
+      // Error handled by parent
     } finally {
       setIsEscalating(false);
     }
   };
 
-  // ==========================================================================
-  // COMPUTED VALUES
-  // ==========================================================================
-
-  /** Filter only human agents (those with status defined) for escalation dropdown */
   const humanAgents = agents.filter((agent) => agent.status !== undefined);
 
   // ==========================================================================
-  // RENDER
+  // RENDER HELPERS
   // ==========================================================================
 
-  // Empty State: No chat selected
+  const renderAttachment = (attachment: {
+    name: string;
+    url: string;
+    type: string;
+  }) => {
+    if (!attachment || !attachment.url) return null;
+
+    const isImage = attachment.type.startsWith("image/");
+
+    if (isImage) {
+      return (
+        <div className="mb-2 rounded-lg overflow-hidden border bg-background/50">
+          <img
+            src={attachment.url}
+            alt={attachment.name}
+            className="max-w-[240px] max-h-[240px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+            onClick={() => window.open(attachment.url, "_blank")}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="flex items-center gap-2 p-3 mb-2 rounded border bg-background/50 hover:bg-background/80 transition-colors group cursor-pointer"
+        onClick={() => window.open(attachment.url, "_blank")}
+      >
+        <div className="p-2 bg-muted rounded-full">
+          <FileIcon className="w-4 h-4 text-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p
+            className="text-xs font-medium truncate max-w-[150px]"
+            title={attachment.name}
+          >
+            {attachment.name}
+          </p>
+          <p className="text-[10px] text-muted-foreground uppercase">
+            {attachment.type.split("/").pop() || "FILE"}
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          <Download className="w-3 h-3" />
+        </Button>
+      </div>
+    );
+  };
+
+  // Empty State
   if (!chatId) {
     return (
       <div className="flex-1 flex items-center justify-center bg-muted/20">
@@ -396,15 +314,18 @@ export const ChatWindow = ({
 
   return (
     <div className="flex-1 flex bg-background">
-      {/* ====================================================================
-          MAIN CHAT AREA
-          ==================================================================== */}
+      {/* Hidden File Input - This was missing in your code! */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
+      {/* Main Chat Area */}
       <div className="flex-1 flex flex-col">
-        {/* ================================================================
-            CHAT HEADER - Customer info, agent badges, and action buttons
-            ================================================================ */}
+        {/* Header */}
         <div className="h-16 border-b bg-card px-6 flex items-center justify-between">
-          {/* Customer Info & Agent Status */}
           <div className="flex items-center gap-3">
             <Avatar className="w-10 h-10">
               <AvatarFallback className="bg-primary/10 text-primary font-semibold">
@@ -414,7 +335,6 @@ export const ChatWindow = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-base">{customerName}</h3>
-                {/* Resolved Status Badge (Existing) */}
                 {status === "resolved" && (
                   <Badge
                     variant="outline"
@@ -424,7 +344,6 @@ export const ChatWindow = ({
                     Resolved
                   </Badge>
                 )}
-                {/* === ADD THIS BLOCK === */}
                 {status === "closed" && (
                   <Badge
                     variant="outline"
@@ -436,7 +355,6 @@ export const ChatWindow = ({
                 )}
               </div>
               <div className="flex items-center gap-2">
-                {/* Dual Agent Tracking Display */}
                 {handledBy === "human" ? (
                   <>
                     <Badge
@@ -479,9 +397,7 @@ export const ChatWindow = ({
             </div>
           </div>
 
-          {/* Action Buttons */}
           <div className="flex items-center gap-2">
-            {/* Quick Action Buttons */}
             <Button variant="ghost" size="icon">
               <Phone className="w-4 h-4" />
             </Button>
@@ -492,7 +408,6 @@ export const ChatWindow = ({
               <Info className="w-4 h-4" />
             </Button>
 
-            {/* Ticket Panel Toggle */}
             <Button
               variant={showTicketPanel ? "default" : "ghost"}
               size="icon"
@@ -507,7 +422,6 @@ export const ChatWindow = ({
               )}
             </Button>
 
-            {/* More Actions Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon">
@@ -515,14 +429,12 @@ export const ChatWindow = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {/* Escalate to Human (only if handled by AI and not escalated) */}
                 {handledBy === "ai" && !escalatedAt && (
                   <DropdownMenuItem onClick={() => setShowEscalateDialog(true)}>
                     <User className="w-4 h-4 mr-2" />
                     Escalate to Human Agent
                   </DropdownMenuItem>
                 )}
-                {/* Assign to Me (only if unassigned) */}
                 {!isAssigned && (
                   <DropdownMenuItem onClick={onAssignToAgent}>
                     <User className="w-4 h-4 mr-2" />
@@ -538,12 +450,9 @@ export const ChatWindow = ({
           </div>
         </div>
 
-        {/* ================================================================
-          MESSAGES AREA - Scrollable message list with states
-          ================================================================ */}
+        {/* Message List */}
         <ScrollArea className="flex-1 p-6">
           <div className="space-y-4 max-w-4xl mx-auto">
-            {/* Loading State */}
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center space-y-3">
@@ -554,7 +463,6 @@ export const ChatWindow = ({
                 </div>
               </div>
             ) : messages.length === 0 ? (
-              /* Empty State: No messages */
               <div className="flex items-center justify-center py-12">
                 <div className="text-center space-y-2">
                   <div className="w-16 h-16 rounded-full bg-muted mx-auto flex items-center justify-center">
@@ -569,7 +477,6 @@ export const ChatWindow = ({
                 </div>
               </div>
             ) : (
-              /* Message List */
               <>
                 {messages.map((message) => {
                   const isCustomer = message.sender === "customer";
@@ -582,7 +489,6 @@ export const ChatWindow = ({
                         isCustomer ? "" : "flex-row-reverse"
                       }`}
                     >
-                      {/* Message Avatar */}
                       <Avatar className="w-8 h-8 flex-shrink-0">
                         <AvatarFallback
                           className={
@@ -607,13 +513,11 @@ export const ChatWindow = ({
                         </AvatarFallback>
                       </Avatar>
 
-                      {/* Message Content */}
                       <div
                         className={`flex-1 ${
                           isCustomer ? "" : "flex flex-col items-end"
                         }`}
                       >
-                        {/* Sender Name & Timestamp */}
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-xs font-medium text-foreground">
                             {message.senderName}
@@ -623,7 +527,6 @@ export const ChatWindow = ({
                           </span>
                         </div>
 
-                        {/* Message Bubble */}
                         <div
                           className={`inline-block max-w-[70%] rounded-lg px-4 py-2 ${
                             isCustomer
@@ -633,59 +536,92 @@ export const ChatWindow = ({
                               : "bg-primary text-primary-foreground"
                           }`}
                         >
-                          <p className="text-sm whitespace-pre-wrap">
-                            {message.content}
-                          </p>
+                          {/* Render Attachment if exists */}
+                          {message.attachment &&
+                            renderAttachment(message.attachment)}
+
+                          {message.content && (
+                            <p className="text-sm whitespace-pre-wrap">
+                              {message.content}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
                   );
                 })}
-                {/* Auto-scroll anchor: invisible div at the end of messages */}
                 <div ref={messagesEndRef} />
               </>
             )}
           </div>
         </ScrollArea>
 
-        {/* ================================================================
-          MESSAGE INPUT - Text input with send button
-          ================================================================ */}
+        {/* Message Input */}
         <div className="border-t bg-card p-4">
-          <div className="flex items-end gap-2 max-w-4xl mx-auto">
-            <Button variant="ghost" size="icon" className="flex-shrink-0">
-              <Paperclip className="w-5 h-5" />
-            </Button>
-            <div className="flex-1">
-              <Input
-                type="text"
-                placeholder={
-                  !isOwnChat
-                    ? "Only the assigned agent can reply"
-                    : "Type your message..."
-                }
-                value={messageInput}
-                onChange={(e) => setMessageInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                disabled={!isOwnChat}
-                className={`min-h-[40px] ${!isOwnChat ? "opacity-60" : ""}`}
-              />
+          <div className="max-w-4xl mx-auto space-y-2">
+            {/* FILE PREVIEW AREA - ADDED THIS FOR BETTER UX */}
+            {selectedFile && (
+              <div className="flex items-center gap-2 p-2 bg-muted rounded-md w-fit">
+                <div className="p-2 bg-background rounded-full">
+                  <FileIcon className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium max-w-[200px] truncate">
+                    {selectedFile.name}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {(selectedFile.size / 1024).toFixed(1)} KB
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 ml-2"
+                  onClick={removeSelectedFile}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="flex-shrink-0"
+                onClick={handlePaperclipClick}
+              >
+                <Paperclip className="w-5 h-5" />
+              </Button>
+              <div className="flex-1">
+                <Input
+                  type="text"
+                  placeholder={
+                    !isOwnChat
+                      ? "Only the assigned agent can reply"
+                      : "Type your message..."
+                  }
+                  value={messageInput}
+                  onChange={(e) => setMessageInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  disabled={!isOwnChat}
+                  className={`min-h-[40px] ${!isOwnChat ? "opacity-60" : ""}`}
+                />
+              </div>
+              <Button
+                onClick={handleSend}
+                disabled={(!messageInput.trim() && !selectedFile) || !isOwnChat}
+                className="flex-shrink-0"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                Send
+              </Button>
             </div>
-            <Button
-              onClick={handleSend}
-              disabled={!messageInput.trim() || !isOwnChat}
-              className="flex-shrink-0"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Send
-            </Button>
           </div>
         </div>
       </div>
 
-      {/* ====================================================================
-          TICKET PANEL - Slide-in sidebar from right
-          ==================================================================== */}
+      {/* Ticket Panel */}
       {showTicketPanel && (
         <div className="w-96 border-l bg-card flex flex-col">
           <TicketPanel
@@ -696,9 +632,7 @@ export const ChatWindow = ({
         </div>
       )}
 
-      {/* ====================================================================
-          ESCALATE DIALOG - Transfer chat to human agent
-          ==================================================================== */}
+      {/* Escalate Dialog */}
       <Dialog open={showEscalateDialog} onOpenChange={setShowEscalateDialog}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -713,7 +647,6 @@ export const ChatWindow = ({
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Current AI Agent Info */}
             {aiAgentName && (
               <div className="bg-muted/50 p-3 rounded-lg">
                 <div className="flex items-center gap-2 text-sm">
@@ -728,7 +661,6 @@ export const ChatWindow = ({
               </div>
             )}
 
-            {/* Select Human Agent */}
             <div className="space-y-2">
               <Label htmlFor="agent">Select Human Agent *</Label>
               <Select
@@ -767,7 +699,6 @@ export const ChatWindow = ({
               </Select>
             </div>
 
-            {/* Escalation Reason (Optional) */}
             <div className="space-y-2">
               <Label htmlFor="reason">Reason (Optional)</Label>
               <Textarea

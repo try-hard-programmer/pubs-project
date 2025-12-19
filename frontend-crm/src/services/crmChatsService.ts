@@ -174,6 +174,16 @@ interface CustomersApiResponse {
   total: number;
 }
 
+export interface SendMessageParams {
+  chatId: string;
+  content: string;
+  senderType: SenderType;
+  senderId: string;
+  ticketId?: string;
+  file?: File | null;
+  metadata?: Record<string, any>;
+}
+
 // ============= API Functions =============
 
 /**
@@ -303,23 +313,44 @@ export const getChatMessages = async (
 };
 
 /**
- * Send a message in a chat
+ * Send a message (Text or File).
+ * Matches FastAPI Endpoint: /chats/{chat_id}/messages
  */
-export const sendMessage = async (
-  chatId: string,
-  content: string,
-  senderType: SenderType = "agent",
-  senderId?: string,
-  ticketId?: string,
-  metadata?: Record<string, any>
-): Promise<Message> => {
-  return apiClient.post<Message>(`/crm/chats/${chatId}/messages`, {
-    content,
-    sender_type: senderType,
-    sender_id: senderId,
-    ticket_id: ticketId,
-    metadata: metadata || {},
-  });
+export const sendMessage = async ({
+  chatId,
+  content,
+  senderType,
+  senderId,
+  ticketId,
+  file,
+  metadata,
+}: SendMessageParams): Promise<Message> => {
+  const formData = new FormData();
+
+  // 1. Mandatory Fields (FastAPI: Form(...))
+  // We ensure content is an empty string if null, as the backend requires a string.
+  formData.append("content", content || "");
+  formData.append("sender_type", senderType);
+  formData.append("sender_id", senderId);
+
+  // 2. Optional Fields
+  if (ticketId) {
+    formData.append("ticket_id", ticketId);
+  }
+
+  // 3. Metadata (FastAPI: expects JSON string in 'metadata' field)
+  // We combine existing metadata with any frontend flags if needed
+  const finalMetadata = metadata || {};
+  formData.append("metadata", JSON.stringify(finalMetadata));
+
+  // 4. File (FastAPI: UploadFile)
+  if (file) {
+    formData.append("file", file);
+  }
+
+  // 5. Send Request
+  // No need to set Content-Type; browser sets multipart/form-data boundary automatically.
+  return apiClient.post<Message>(`/crm/chats/${chatId}/messages`, formData);
 };
 
 /**

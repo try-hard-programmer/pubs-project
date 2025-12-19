@@ -91,8 +91,13 @@ interface Message {
   content: string;
   timestamp: string;
   ticketId?: string;
+  // 👇 ADD THIS OPTIONAL PROPERTY
+  attachment?: {
+    name: string;
+    url: string;
+    type: string;
+  };
 }
-
 /**
  * Ticket interface for customer support tickets
  */
@@ -556,6 +561,16 @@ export const CustomerService = ({
             else if (type === "ai") senderRole = "ai";
             else senderRole = "customer";
 
+            // FIX: Define 'attachment' inside the map loop using 'apiMsg'
+            const attachment = apiMsg.metadata?.media_url
+              ? {
+                  name: apiMsg.metadata.filename || "Attachment",
+                  url: apiMsg.metadata.media_url,
+                  type:
+                    apiMsg.metadata.media_type || "application/octet-stream",
+                }
+              : undefined;
+
             return {
               id: apiMsg.id,
               sender: senderRole,
@@ -566,6 +581,7 @@ export const CustomerService = ({
                 minute: "2-digit",
               }),
               ticketId: apiMsg.ticket_id || undefined,
+              attachment: attachment, // FIX: Use the variable name 'attachment' defined above
             };
           }
         );
@@ -955,71 +971,73 @@ export const CustomerService = ({
 
   const selectedChat = chats.find((chat) => chat.id === activeChat);
 
-  const handleSendMessage = async (message: string) => {
+  // ==========================================================================
+  // MESSAGE HANDLER (FIXED)
+  // ==========================================================================
+  const handleSendMessage = async (message: string, file?: File) => {
     if (!activeChat) return;
 
     try {
       const selectedChat = chats.find((c) => c.id === activeChat);
       if (!selectedChat) return;
-
       if (!user?.id) {
         toast.error("Anda harus login untuk mengirim pesan");
         return;
       }
 
-      if (selectedChat.humanId && selectedChat.humanId !== user.id) {
-        toast.error(
-          "Hanya agent yang ditugaskan yang dapat mengirim pesan ke chat ini"
-        );
-        return;
-      }
-
-      const fallbackName = user.email ? user.email.split("@")[0] : "Agent";
-      const agentName = user.user_metadata?.name || fallbackName;
-
+      // 1. Prepare Metadata
       const metadata = {
-        agent_name: agentName,
-        agent_email: user.email,
-        handled_by: selectedChat.handledBy,
-        chat_status: selectedChat.status,
-        sent_at: new Date().toISOString(),
         source: "web_ui",
         user_agent: navigator.userAgent,
+        // Backend will append 'media_url', 'filename', etc. automatically if file exists
       };
 
-      const sentMessage = await crmChatsService.sendMessage(
-        activeChat,
-        message,
-        "agent",
-        user.id,
-        undefined,
-        metadata
-      );
+      // 2. Send to API
+      const sentMessage = await crmChatsService.sendMessage({
+        chatId: activeChat,
+        content: message, // Pass exactly what user typed (empty string is fine for backend)
+        senderType: "agent",
+        senderId: user.id,
+        file: file,
+        metadata: metadata,
+      });
 
+      // 3. Handle Ticket Creation if API returns it
       if (sentMessage.ticket_id) {
         fetchAndAddTicket(sentMessage.ticket_id, activeChat);
       }
 
+      // 4. Transform API Response to UI Message
+      const attachment = sentMessage.metadata?.media_url
+        ? {
+            name: sentMessage.metadata.filename || "Attachment",
+            url: sentMessage.metadata.media_url,
+            type: sentMessage.metadata.media_type || "application/octet-stream",
+          }
+        : undefined;
+
       const transformedMessage: Message = {
         id: sentMessage.id,
         sender: "agent",
-        senderName: agentName,
+        senderName: user.user_metadata?.name || "Me",
         content: sentMessage.content,
         timestamp: new Date(sentMessage.created_at).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         }),
         ticketId: sentMessage.ticket_id || undefined,
+        attachment: attachment,
       };
 
+      // 5. Update UI State
       setChats((prevChats) =>
         prevChats.map((chat) => {
           if (chat.id !== activeChat) return chat;
 
+          // Update or Append logic
           const existingMsgIndex = chat.messages.findIndex(
             (m) => m.id === transformedMessage.id
           );
-
           let newMessages;
           if (existingMsgIndex !== -1) {
             newMessages = [...chat.messages];
@@ -1031,24 +1049,15 @@ export const CustomerService = ({
           return {
             ...chat,
             messages: newMessages,
-            lastMessage: message,
-            timestamp: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
+            lastMessage: file ? `[File] ${message}` : message,
+            timestamp: transformedMessage.timestamp,
           };
         })
       );
 
       setCurrentChatMessages((prev) => {
-        const existingMsgIndex = prev.findIndex(
-          (m) => m.id === transformedMessage.id
-        );
-        if (existingMsgIndex !== -1) {
-          const updated = [...prev];
-          updated[existingMsgIndex] = transformedMessage;
-          return updated;
-        }
+        // Prevent duplicates
+        if (prev.some((m) => m.id === transformedMessage.id)) return prev;
         return [...prev, transformedMessage];
       });
     } catch (error) {
