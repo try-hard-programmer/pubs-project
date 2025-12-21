@@ -49,6 +49,14 @@ export interface WebSocketNewMessage extends WebSocketMessage {
     customer_id: string;
     customer_name: string;
     message_content: string;
+    // FIX: Added fields to match Backend Update
+    sender_name?: string;
+    sender_type?: string;
+    attachment?: {
+      url: string;
+      type: string;
+      name: string;
+    };
     channel:
       | "whatsapp"
       | "telegram"
@@ -60,7 +68,7 @@ export interface WebSocketNewMessage extends WebSocketMessage {
     is_new_chat: boolean;
     was_reopened: boolean;
     assigned_agent_id?: string;
-    ticket_id?: string; // <--- ADD THIS LINE
+    ticket_id?: string;
   };
 }
 

@@ -57,6 +57,8 @@ interface Message {
   content: string;
   timestamp: string;
   ticketId?: string;
+  // Add metadata back to support your current payload
+  metadata?: any;
   attachment?: {
     name: string;
     url: string;
@@ -237,9 +239,7 @@ export const ChatWindow = ({
 
   const humanAgents = agents.filter((agent) => agent.status !== undefined);
 
-  // ==========================================================================
   // RENDER HELPERS
-  // ==========================================================================
 
   const renderAttachment = (attachment: {
     name: string;
@@ -248,7 +248,15 @@ export const ChatWindow = ({
   }) => {
     if (!attachment || !attachment.url) return null;
 
-    const isImage = attachment.type.startsWith("image/");
+    // LOGIC:
+    // 1. Is the MIME type explicitly an image? (e.g. "image/png")
+    // 2. OR is the MIME type generic ("file") but the name looks like an image?
+    const isImage =
+      (attachment.type && attachment.type.startsWith("image")) ||
+      (attachment.type && attachment.type.startsWith("image/")) ||
+      (attachment.type === "file" &&
+        /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(attachment.name)) ||
+      /\.(jpg|jpeg|png|gif|webp|bmp)$/i.test(attachment.url); // Last resort: check URL
 
     if (isImage) {
       return (
@@ -279,7 +287,9 @@ export const ChatWindow = ({
             {attachment.name}
           </p>
           <p className="text-[10px] text-muted-foreground uppercase">
-            {attachment.type.split("/").pop() || "FILE"}
+            {attachment.type && attachment.type !== "file"
+              ? attachment.type.split("/").pop()
+              : "FILE"}
           </p>
         </div>
         <Button
@@ -482,6 +492,9 @@ export const ChatWindow = ({
                   const isCustomer = message.sender === "customer";
                   const isAI = message.sender === "ai";
 
+                  // CHANGE: Use the helper here
+                  const attachment = message.attachment;
+
                   return (
                     <div
                       key={message.id}
@@ -489,6 +502,7 @@ export const ChatWindow = ({
                         isCustomer ? "" : "flex-row-reverse"
                       }`}
                     >
+                      {/* ... Avatar code remains the same ... */}
                       <Avatar className="w-8 h-8 flex-shrink-0">
                         <AvatarFallback
                           className={
@@ -536,9 +550,8 @@ export const ChatWindow = ({
                               : "bg-primary text-primary-foreground"
                           }`}
                         >
-                          {/* Render Attachment if exists */}
-                          {message.attachment &&
-                            renderAttachment(message.attachment)}
+                          {/* CHANGE: Use the variable 'attachment' instead of 'message.attachment' */}
+                          {attachment && renderAttachment(attachment)}
 
                           {message.content && (
                             <p className="text-sm whitespace-pre-wrap">

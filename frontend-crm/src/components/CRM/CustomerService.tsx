@@ -91,7 +91,7 @@ interface Message {
   content: string;
   timestamp: string;
   ticketId?: string;
-  // 👇 ADD THIS
+  metadata?: any; // Add this line
   attachment?: {
     name: string;
     url: string;
@@ -552,6 +552,7 @@ export const CustomerService = ({
         );
 
         // Transform messages
+        // ... inside fetchChatDetails ...
         const transformedMessages: Message[] = messagesResponse.messages.map(
           (apiMsg) => {
             let senderRole: "customer" | "agent" | "ai" = "customer";
@@ -561,13 +562,20 @@ export const CustomerService = ({
             else if (type === "ai") senderRole = "ai";
             else senderRole = "customer";
 
-            // 👇 UPDATED: Map Backend 'media_url' to Frontend 'attachment'
+            // FIX: Check ALL possible type fields from your payload
+            let fileType = "application/octet-stream";
+            if (apiMsg.metadata) {
+              fileType =
+                apiMsg.metadata.media_type ||
+                apiMsg.metadata.message_type ||
+                "file";
+            }
+
             const attachment = apiMsg.metadata?.media_url
               ? {
                   name: apiMsg.metadata.filename || "Attachment",
                   url: apiMsg.metadata.media_url,
-                  type:
-                    apiMsg.metadata.media_type || "application/octet-stream",
+                  type: fileType, // Pass the detected type
                 }
               : undefined;
 
@@ -581,7 +589,7 @@ export const CustomerService = ({
                 minute: "2-digit",
               }),
               ticketId: apiMsg.ticket_id || undefined,
-              attachment: attachment, // <--- Pass extracted attachment to UI
+              attachment: attachment,
             };
           }
         );
@@ -690,15 +698,19 @@ export const CustomerService = ({
   const handleNewMessageNotification = useCallback(
     async (notification: WebSocketNewMessage) => {
       const { data } = notification;
-      const { chat_id, message_id, message_content, ticket_id } = data;
+      // FIX: Destructure new fields directly
+      const {
+        chat_id,
+        message_id,
+        message_content,
+        ticket_id,
+        sender_name,
+        sender_type,
+        attachment,
+      } = data;
 
       console.log("📩 WebSocket Message Received:", data);
 
-      const payload = data as any;
-      const senderType = payload.sender_type;
-      const senderName = payload.sender_name;
-
-      // Check existence in CURRENT state (Ref)
       const chatExists = chatsRef.current.some((c) => c.id === chat_id);
 
       // === 1. TICKET LOGIC ===
@@ -708,7 +720,7 @@ export const CustomerService = ({
 
       // === 2. SENDER LOGIC ===
       let finalSender: "customer" | "agent" | "ai" = "customer";
-      const rawType = String(senderType || "").toLowerCase();
+      const rawType = String(sender_type || "").toLowerCase();
 
       if (rawType === "agent" || rawType === "human" || rawType === "admin") {
         finalSender = "agent";
@@ -722,26 +734,13 @@ export const CustomerService = ({
         finalSender = "customer";
       }
 
-      // === 3. NEW CHAT LOGIC (With Race Condition Fix) ===
+      // === 3. NEW CHAT LOGIC ===
       if (!chatExists) {
-        // FIX: Check if we are already handling this new chat
-        if (pendingChatCreations.current.has(chat_id)) {
-          console.log(
-            "⏳ Chat creation already in progress, skipping duplicate event:",
-            chat_id
-          );
-          return;
-        }
-
-        console.log("🆕 New chat detected via WebSocket:", chat_id);
-
-        // Mark as pending
+        if (pendingChatCreations.current.has(chat_id)) return;
         pendingChatCreations.current.add(chat_id);
 
         try {
           const newChatData = await crmChatsService.getChat(chat_id);
-
-          // ... (Your existing mapping logic) ...
           const newChat: Chat = {
             id: newChatData.id,
             customerId: newChatData.customer_id,
@@ -775,23 +774,18 @@ export const CustomerService = ({
           };
 
           setChats((prev) => {
-            // Double-safety check inside updater
             if (prev.some((c) => c.id === newChat.id)) return prev;
             return [newChat, ...prev];
           });
 
           playNotificationSound("message", 0.5);
           toast.info(`New chat from ${newChat.customerName}`, {
-            action: {
-              label: "View",
-              onClick: () => setActiveChat(newChat.id),
-            },
+            action: { label: "View", onClick: () => setActiveChat(newChat.id) },
             duration: 5000,
           });
         } catch (error) {
           console.error("Failed to fetch new chat details:", error);
         } finally {
-          // Release the lock
           pendingChatCreations.current.delete(chat_id);
         }
         return;
@@ -807,7 +801,7 @@ export const CustomerService = ({
 
         updatedChats[chatIndex] = {
           ...chat,
-          lastMessage: message_content,
+          lastMessage: message_content || (attachment ? "[File]" : ""), // Show [File] if content is empty
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -825,27 +819,19 @@ export const CustomerService = ({
 
       // === 5. APPEND MESSAGE TO ACTIVE VIEW ===
       if (chat_id === activeChatRef.current) {
-        // 👇 UPDATED: Handle attachment in incoming WS message
-        const payloadMetadata = payload.metadata || {};
-        const attachment = payloadMetadata.media_url
-          ? {
-              name: payloadMetadata.filename || "Attachment",
-              url: payloadMetadata.media_url,
-              type: payloadMetadata.media_type || "application/octet-stream",
-            }
-          : undefined;
-
         const transformedMessage: Message = {
           id: message_id,
           sender: finalSender,
-          senderName: senderName || data.customer_name || "Unknown",
+          // FIX: Use real sender_name from WS (Fixes "AI Agent" glitch)
+          senderName: sender_name || data.customer_name || "Unknown",
           content: message_content,
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           }),
           ticketId: ticket_id || undefined,
-          attachment: attachment, // <--- Pass WS attachment to UI
+          // FIX: Use attachment directly from WS (Fixes "Image Missing" glitch)
+          attachment: attachment,
         };
 
         setCurrentChatMessages((prev) => {
@@ -853,7 +839,6 @@ export const CustomerService = ({
           return [...prev, transformedMessage];
         });
       } else {
-        // Only play sound if not active chat (moved here to avoid duplicate sound on new chat creation)
         playNotificationSound("message", 0.5);
       }
     },

@@ -86,10 +86,16 @@ export interface Message {
   sender_id?: string | null;
   content: string;
   ticket_id?: string | null;
+  // KEEP METADATA: Your payload relies on this!
   metadata?: Record<string, any>;
+  // OPTIONAL: For when the backend update actually goes live
+  attachment?: {
+    url: string;
+    type: string;
+    name: string;
+  };
   created_at: string;
   updated_at: string;
-  // Populated fields
   sender_name?: string;
 }
 
