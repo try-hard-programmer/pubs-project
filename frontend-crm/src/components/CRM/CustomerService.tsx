@@ -91,7 +91,7 @@ interface Message {
   content: string;
   timestamp: string;
   ticketId?: string;
-  // 👇 ADD THIS OPTIONAL PROPERTY
+  // 👇 ADD THIS
   attachment?: {
     name: string;
     url: string;
@@ -561,7 +561,7 @@ export const CustomerService = ({
             else if (type === "ai") senderRole = "ai";
             else senderRole = "customer";
 
-            // FIX: Define 'attachment' inside the map loop using 'apiMsg'
+            // 👇 UPDATED: Map Backend 'media_url' to Frontend 'attachment'
             const attachment = apiMsg.metadata?.media_url
               ? {
                   name: apiMsg.metadata.filename || "Attachment",
@@ -581,7 +581,7 @@ export const CustomerService = ({
                 minute: "2-digit",
               }),
               ticketId: apiMsg.ticket_id || undefined,
-              attachment: attachment, // FIX: Use the variable name 'attachment' defined above
+              attachment: attachment, // <--- Pass extracted attachment to UI
             };
           }
         );
@@ -825,6 +825,16 @@ export const CustomerService = ({
 
       // === 5. APPEND MESSAGE TO ACTIVE VIEW ===
       if (chat_id === activeChatRef.current) {
+        // 👇 UPDATED: Handle attachment in incoming WS message
+        const payloadMetadata = payload.metadata || {};
+        const attachment = payloadMetadata.media_url
+          ? {
+              name: payloadMetadata.filename || "Attachment",
+              url: payloadMetadata.media_url,
+              type: payloadMetadata.media_type || "application/octet-stream",
+            }
+          : undefined;
+
         const transformedMessage: Message = {
           id: message_id,
           sender: finalSender,
@@ -835,6 +845,7 @@ export const CustomerService = ({
             minute: "2-digit",
           }),
           ticketId: ticket_id || undefined,
+          attachment: attachment, // <--- Pass WS attachment to UI
         };
 
         setCurrentChatMessages((prev) => {
@@ -980,65 +991,82 @@ export const CustomerService = ({
     try {
       const selectedChat = chats.find((c) => c.id === activeChat);
       if (!selectedChat) return;
+
       if (!user?.id) {
         toast.error("Anda harus login untuk mengirim pesan");
         return;
       }
 
+      if (selectedChat.humanId && selectedChat.humanId !== user.id) {
+        toast.error(
+          "Hanya agent yang ditugaskan yang dapat mengirim pesan ke chat ini"
+        );
+        return;
+      }
+
+      const fallbackName = user.email ? user.email.split("@")[0] : "Agent";
+      const agentName = user.user_metadata?.name || fallbackName;
+
       // 1. Prepare Metadata
       const metadata = {
+        agent_name: agentName,
+        agent_email: user.email,
+        handled_by: selectedChat.handledBy,
+        chat_status: selectedChat.status,
+        sent_at: new Date().toISOString(),
         source: "web_ui",
         user_agent: navigator.userAgent,
-        // Backend will append 'media_url', 'filename', etc. automatically if file exists
       };
 
-      // 2. Send to API
+      // 2. Send Message to Backend (Pass the file!)
       const sentMessage = await crmChatsService.sendMessage({
         chatId: activeChat,
-        content: message, // Pass exactly what user typed (empty string is fine for backend)
+        content: message,
         senderType: "agent",
         senderId: user.id,
         file: file,
         metadata: metadata,
       });
 
-      // 3. Handle Ticket Creation if API returns it
       if (sentMessage.ticket_id) {
         fetchAndAddTicket(sentMessage.ticket_id, activeChat);
       }
 
-      // 4. Transform API Response to UI Message
-      const attachment = sentMessage.metadata?.media_url
+      // 3. Create Optimistic Attachment Object (INSTANT PREVIEW FIX)
+      // We use URL.createObjectURL to show the local file immediately
+      const attachmentData = file
         ? {
-            name: sentMessage.metadata.filename || "Attachment",
-            url: sentMessage.metadata.media_url,
-            type: sentMessage.metadata.media_type || "application/octet-stream",
+            name: file.name,
+            url: URL.createObjectURL(file),
+            type: file.type,
           }
         : undefined;
 
+      // 4. Create Message Object for UI
       const transformedMessage: Message = {
         id: sentMessage.id,
         sender: "agent",
-        senderName: user.user_metadata?.name || "Me",
+        senderName: agentName,
         content: sentMessage.content,
         timestamp: new Date(sentMessage.created_at).toLocaleTimeString([], {
           hour: "2-digit",
           minute: "2-digit",
         }),
         ticketId: sentMessage.ticket_id || undefined,
-        attachment: attachment,
+        attachment: attachmentData, // <--- Add attachment to state
       };
 
-      // 5. Update UI State
+      // 5. Update Chat List State
       setChats((prevChats) =>
         prevChats.map((chat) => {
           if (chat.id !== activeChat) return chat;
 
-          // Update or Append logic
+          // Update logic (append or replace if exists)
           const existingMsgIndex = chat.messages.findIndex(
             (m) => m.id === transformedMessage.id
           );
           let newMessages;
+
           if (existingMsgIndex !== -1) {
             newMessages = [...chat.messages];
             newMessages[existingMsgIndex] = transformedMessage;
@@ -1050,13 +1078,16 @@ export const CustomerService = ({
             ...chat,
             messages: newMessages,
             lastMessage: file ? `[File] ${message}` : message,
-            timestamp: transformedMessage.timestamp,
+            timestamp: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
           };
         })
       );
 
+      // 6. Update Active Window Messages
       setCurrentChatMessages((prev) => {
-        // Prevent duplicates
         if (prev.some((m) => m.id === transformedMessage.id)) return prev;
         return [...prev, transformedMessage];
       });
