@@ -107,9 +107,7 @@ export const CustomerServiceSidebar = ({
     )
   );
 
-  const channels = Array.from(
-    new Set(chats.filter((c) => c.channel).map((c) => c.channel))
-  );
+  const channels = ["whatsapp", "telegram", "email"];
 
   // Filter Logic
   const filteredChats = chats.filter((chat) => {

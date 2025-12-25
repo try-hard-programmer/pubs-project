@@ -115,6 +115,7 @@ export const NewChatModal = ({
 
   const selectedChannel = channels.find((c) => c.value === channel);
 
+  // Reset state when modal opens
   useEffect(() => {
     if (open) {
       setSearchQuery("");
@@ -128,6 +129,7 @@ export const NewChatModal = ({
     }
   }, [open]);
 
+  // Handle Search Debounce
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -186,19 +188,42 @@ export const NewChatModal = ({
     setErrors((prev) => ({ ...prev, selection: "" }));
   };
 
+  // --- Helper Functions ---
+
   const hasEmoji = (str: string) =>
     /(\p{Extended_Pictographic}|\p{Emoji_Presentation})/gu.test(str);
 
+  // STRICT Regex FIX: Removed invalid escape characters.
+  // Allowed: Letters, Numbers, Spaces, Hyphen (-), Apostrophe ('), Dot (.)
+  const isValidName = (name: string) => {
+    // FIX: Removed backslash before ' and . (only needed for hyphen if not at start/end)
+    // Note: In [] hyphen is special, so we keep \- or move it to end.
+    // ' and . do NOT need escaping in []
+    const validNameRegex = /^[\p{L}\p{N}\s\-''.]+$/u;
+    return validNameRegex.test(name);
+  };
+
   const handleNameChange = (value: string) => {
-    if (hasEmoji(value)) {
-      setErrors((prev) => ({
-        ...prev,
-        customerName: "Nama tidak boleh mengandung emoticon",
-      }));
+    // 1. Allow clearing the input
+    if (value === "") {
+      setManualName("");
+      setErrors((prev) => ({ ...prev, customerName: "" }));
       return;
     }
-    setManualName(value);
+
+    // 2. INPUT MASKING: If invalid character, REJECT change immediately
+    if (!isValidName(value)) {
+      setErrors((prev) => ({
+        ...prev,
+        customerName:
+          "Karakter tidak diizinkan. Hanya huruf, angka, titik, dan spasi.",
+      }));
+      return; // Stop execution, do not update state
+    }
+
+    // 3. Valid input
     setErrors((prev) => ({ ...prev, customerName: "" }));
+    setManualName(value);
   };
 
   const handleContactChange = (value: string) => {
@@ -213,6 +238,8 @@ export const NewChatModal = ({
     setErrors((prev) => ({ ...prev, contact: "" }));
   };
 
+  // --- Validation ---
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -220,12 +247,15 @@ export const NewChatModal = ({
       if (channel === "telegram") {
         newErrors.selection = "Manual input tidak diperbolehkan untuk Telegram";
       }
+
+      // Name Validation
       if (!manualName.trim()) {
         newErrors.customerName = "Nama wajib diisi";
-      } else if (hasEmoji(manualName)) {
-        newErrors.customerName = "Nama tidak boleh mengandung emoticon";
+      } else if (!isValidName(manualName)) {
+        newErrors.customerName = "Nama mengandung karakter tidak valid";
       }
 
+      // Contact Validation
       if (!manualContact.trim()) {
         newErrors.contact = "Kontak wajib diisi";
       } else if (hasEmoji(manualContact)) {
@@ -269,6 +299,7 @@ export const NewChatModal = ({
       if (channel === "whatsapp" && finalContact.startsWith("+"))
         finalContact = finalContact.replace(/^\+/, "");
 
+      // Check for duplicates
       const cleanNew = finalContact.replace(/[^a-zA-Z0-9]/g, "");
       const duplicate = existingChats.find((c) => {
         if (selectedCustomer?.id && c.customerId === selectedCustomer.id)
@@ -323,6 +354,7 @@ export const NewChatModal = ({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Channel Select */}
           <div className="space-y-2">
             <Label>Channel</Label>
             <Select
@@ -381,6 +413,7 @@ export const NewChatModal = ({
               )}
             </div>
 
+            {/* TAB: Existing Customer */}
             <TabsContent value="existing" className="mt-4 space-y-2">
               <Label>Customer</Label>
               <div className="relative">
@@ -450,6 +483,7 @@ export const NewChatModal = ({
               )}
             </TabsContent>
 
+            {/* TAB: Manual Input */}
             <TabsContent value="manual" className="mt-4 space-y-4">
               <div className="space-y-2">
                 <Label>Nama Customer</Label>

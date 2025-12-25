@@ -119,6 +119,7 @@ interface Ticket {
   // Extra fields for Kanban display
   customerName?: string;
   chatId?: string;
+  channel?: "whatsapp" | "telegram" | "email" | "web";
 }
 
 /**
@@ -127,24 +128,21 @@ interface Ticket {
 interface Chat {
   id: string;
   customerName: string;
-  customerId: string; // Needed for ticket creation
+  customerId: string;
   lastMessage: string;
   timestamp: string;
   unreadCount: number;
-  // Legacy fields
   isAssigned: boolean;
   assignedTo: string;
-  // Dual agent tracking
   aiAgentId?: string;
   aiAgentName?: string;
   humanAgentId?: string;
   humanAgentName?: string;
-  humanId?: string; // User ID of the human agent
+  humanId?: string;
   handledBy: "ai" | "human" | "unassigned";
-  // Escalation tracking
   escalatedAt?: string;
   escalationReason?: string;
-  // Status and content
+  // FIX: Remove '?' (Make it required) and change to string to match Sidebar & API
   channel: string;
   status: "open" | "pending" | "assigned" | "resolved" | "closed";
   messages: Message[];
@@ -246,6 +244,10 @@ export const CustomerService = ({
   useEffect(() => {
     agentsRef.current = agents;
   }, [agents]);
+
+  useEffect(() => {
+    setActiveChat(null);
+  }, [filterType]);
 
   const [chatsLoading, setChatsLoading] = useState(true);
   const [customersMap, setCustomersMap] = useState<Map<string, Customer>>(
@@ -437,11 +439,10 @@ export const CustomerService = ({
         // PARALLEL FETCHING
         const [openRes, progressRes, resolvedRes, closedRes] =
           await Promise.all([
-            // 1. OPEN: Fetch ALL open tickets (Removed date limit)
+            // 1. OPEN: Fetch ALL open tickets
             crmChatsService.getTickets({
               status_filter: "open",
-              limit: 100, // Increased limit to catch backlog
-              // created_after: thirtyDaysAgo, <--- REMOVED to show old tickets
+              limit: 100,
               sort_by: "created_at",
               sort_order: "desc",
             }) as any,
@@ -454,20 +455,20 @@ export const CustomerService = ({
               sort_order: "desc",
             }) as any,
 
-            // 3. RESOLVED: Last 30 days (Restored from 7 days)
+            // 3. RESOLVED: Last 30 days
             crmChatsService.getTickets({
               status_filter: "resolved",
               limit: 50,
-              updated_after: thirtyDaysAgo, // <--- 30 Days
+              updated_after: thirtyDaysAgo,
               sort_by: "updated_at",
               sort_order: "desc",
             }) as any,
 
-            // 4. CLOSED: Last 30 days (Restored from 7 days)
+            // 4. CLOSED: Last 30 days
             crmChatsService.getTickets({
               status_filter: "closed",
               limit: 50,
-              updated_after: thirtyDaysAgo, // <--- 30 Days
+              updated_after: thirtyDaysAgo,
               sort_by: "updated_at",
               sort_order: "desc",
             }) as any,
@@ -518,6 +519,9 @@ export const CustomerService = ({
             relatedMessages: [],
             customerName: apiTicket.customer_name || "Unknown Customer",
             chatId: apiTicket.chat_id,
+
+            // 🚀 FIX: THIS IS THE MISSING LINE
+            channel: apiTicket.channel || apiTicket.chat?.channel || "web",
           };
         });
 
@@ -1616,6 +1620,8 @@ export const CustomerService = ({
               isAssigned={selectedChat?.isAssigned || false}
               assignedTo={selectedChat?.assignedTo}
               isOwnChat={selectedChat?.humanId === user?.id}
+              // FIX: Pass the AI Agent ID here
+              aiAgentId={selectedChat?.aiAgentId}
               aiAgentName={selectedChat?.aiAgentName}
               humanAgentName={selectedChat?.humanAgentName}
               handledBy={selectedChat?.handledBy || "unassigned"}

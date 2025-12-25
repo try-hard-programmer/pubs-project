@@ -18,6 +18,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  MessageCircle,
+  Send,
+  Mail,
+  Globe,
   AlertCircle,
   Clock,
   CheckCircle2,
@@ -46,6 +50,7 @@ interface Ticket {
   relatedMessages: string[];
   customerName?: string;
   chatId?: string;
+  channel?: "whatsapp" | "telegram" | "email" | "web";
 }
 
 interface Agent {
@@ -121,8 +126,13 @@ export const TicketingKanban = ({
       ticket.ticketNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ticket.customerName?.toLowerCase().includes(searchQuery.toLowerCase());
 
+    // FIX: Added logic for "assigned" and "unassigned" filters
     const matchesAgent =
-      filterAgent === "all" || ticket.assignedTo === filterAgent;
+      filterAgent === "all" ||
+      (filterAgent === "unassigned" && !ticket.assignedTo) ||
+      (filterAgent === "assigned" && ticket.assignedTo) ||
+      ticket.assignedTo === filterAgent;
+
     const matchesPriority =
       filterPriority === "all" || ticket.priority === filterPriority;
 
@@ -160,7 +170,7 @@ export const TicketingKanban = ({
 
   return (
     <>
-      <div className="flex-1 flex flex-col bg-background p-3">
+      <div className="flex-1 flex flex-col bg-background p-3 min-w-0">
         {/* Header with filters */}
         <div className="mb-3 space-y-2">
           <div>
@@ -190,6 +200,12 @@ export const TicketingKanban = ({
                 <SelectItem value="all" className="text-xs">
                   All Agents
                 </SelectItem>
+                {/* FIX: Add Static Options Here */}
+                <SelectItem value="unassigned" className="text-xs">
+                  Unassigned
+                </SelectItem>
+
+                {/* Existing Agent List */}
                 {agents
                   .filter((a) => a.status === "active")
                   .map((agent) => (
@@ -293,7 +309,7 @@ export const TicketingKanban = ({
           </div>
         ) : (
           <DragDropContext onDragEnd={handleDragEnd}>
-            <div className="flex-1 overflow-x-auto pb-3">
+            <div className="flex-1 overflow-x-auto pb-3 w-full">
               <div className="flex gap-3 min-w-max h-full">
                 {columns.map((column) => {
                   const columnTickets = filteredTickets.filter(

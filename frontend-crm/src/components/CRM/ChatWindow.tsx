@@ -108,9 +108,11 @@ interface ChatWindowProps {
   assignedTo?: string;
   isOwnChat: boolean;
 
-  // Dual agent tracking
+  // FIX: Add aiAgentId to the interface
+  aiAgentId?: string;
   aiAgentName?: string;
   humanAgentName?: string;
+
   handledBy: "ai" | "human" | "unassigned";
   escalatedAt?: string;
   escalationReason?: string;
@@ -144,6 +146,8 @@ export const ChatWindow = ({
   isAssigned,
   assignedTo,
   isOwnChat,
+  // FIX: Destructure aiAgentId
+  aiAgentId,
   aiAgentName,
   humanAgentName,
   handledBy,
@@ -237,7 +241,22 @@ export const ChatWindow = ({
     }
   };
 
-  const humanAgents = agents.filter((agent) => agent.status !== undefined);
+  const humanAgents = agents.filter((agent) => {
+    // 1. Must have a status (Basic check)
+    if (!agent.status) return false;
+
+    // 2. Exclude by ID (Strongest check)
+    if (aiAgentId && agent.id === aiAgentId) return false;
+
+    // 3. Exclude by Name (Fallback)
+    if (aiAgentName && agent.name === aiAgentName) return false;
+
+    // 4. Exclude generic AI names (Safety net)
+    if (agent.name === "AI Agent" || agent.name.toLowerCase().includes("bot"))
+      return false;
+
+    return true;
+  });
 
   // RENDER HELPERS
 
