@@ -677,6 +677,68 @@ export const CustomerService = ({
     // Removed 'agents' from dependency to prevent double fetch loop on page load
   }, [activeChat]);
 
+  const fetchAndPrependChat = useCallback(
+    async (chatId: string, initialContent?: string, customerName?: string) => {
+      // Prevent duplicate processing
+      if (chatsRef.current.some((c) => c.id === chatId)) return;
+      if (pendingChatCreations.current.has(chatId)) return;
+
+      pendingChatCreations.current.add(chatId);
+
+      try {
+        const newChatData = await crmChatsService.getChat(chatId);
+
+        const newChat: Chat = {
+          id: newChatData.id,
+          customerId: newChatData.customer_id,
+          customerName: newChatData.customer_name || customerName || "Unknown",
+          lastMessage:
+            newChatData.last_message?.content || initialContent || "",
+          timestamp: new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          }),
+          unreadCount: 1,
+          isAssigned: newChatData.handled_by === "human",
+          assignedTo:
+            (newChatData.handled_by === "human"
+              ? newChatData.human_agent_name
+              : newChatData.ai_agent_name) || "-",
+          aiAgentId: newChatData.ai_agent_id,
+          aiAgentName: newChatData.ai_agent_name,
+          humanAgentId: newChatData.human_agent_id,
+          humanAgentName: newChatData.human_agent_name,
+          humanId: newChatData.human_agent_id,
+          handledBy: newChatData.handled_by,
+          escalatedAt: newChatData.escalated_at,
+          escalationReason: newChatData.escalation_reason,
+          channel: newChatData.channel || "telegram",
+          status: newChatData.status as any,
+          messages: [],
+          labels: [],
+          createdDate: new Date(newChatData.created_at).toLocaleDateString(),
+          tickets: [],
+        };
+
+        setChats((prev) => {
+          if (prev.some((c) => c.id === newChat.id)) return prev;
+          return [newChat, ...prev];
+        });
+
+        playNotificationSound("message", 0.5);
+        toast.info(`New chat started: ${newChat.customerName}`, {
+          action: { label: "View", onClick: () => setActiveChat(newChat.id) },
+          duration: 5000,
+        });
+      } catch (error) {
+        console.error("Failed to fetch new chat details:", error);
+      } finally {
+        pendingChatCreations.current.delete(chatId);
+      }
+    },
+    []
+  );
+
   // Fetch agents on component mount
   useEffect(() => {
     const fetchAgents = async () => {
@@ -702,7 +764,6 @@ export const CustomerService = ({
   const handleNewMessageNotification = useCallback(
     async (notification: WebSocketNewMessage) => {
       const { data } = notification;
-      // FIX: Destructure new fields directly
       const {
         chat_id,
         message_id,
@@ -725,7 +786,6 @@ export const CustomerService = ({
       // === 2. SENDER LOGIC ===
       let finalSender: "customer" | "agent" | "ai" = "customer";
       const rawType = String(sender_type || "").toLowerCase();
-
       if (rawType === "agent" || rawType === "human" || rawType === "admin") {
         finalSender = "agent";
       } else if (
@@ -734,68 +794,16 @@ export const CustomerService = ({
         rawType === "system"
       ) {
         finalSender = "ai";
-      } else {
-        finalSender = "customer";
       }
 
-      // === 3. NEW CHAT LOGIC ===
+      // === 3. NEW CHAT LOGIC (Refactored) ===
       if (!chatExists) {
-        if (pendingChatCreations.current.has(chat_id)) return;
-        pendingChatCreations.current.add(chat_id);
-
-        try {
-          const newChatData = await crmChatsService.getChat(chat_id);
-          const newChat: Chat = {
-            id: newChatData.id,
-            customerId: newChatData.customer_id,
-            customerName:
-              newChatData.customer_name || data.customer_name || "Unknown",
-            lastMessage: newChatData.last_message?.content || message_content,
-            timestamp: new Date().toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
-            unreadCount: 1,
-            isAssigned: newChatData.handled_by === "human",
-            assignedTo:
-              (newChatData.handled_by === "human"
-                ? newChatData.human_agent_name
-                : newChatData.ai_agent_name) || "-",
-            aiAgentId: newChatData.ai_agent_id,
-            aiAgentName: newChatData.ai_agent_name,
-            humanAgentId: newChatData.human_agent_id,
-            humanAgentName: newChatData.human_agent_name,
-            humanId: newChatData.human_agent_id,
-            handledBy: newChatData.handled_by,
-            escalatedAt: newChatData.escalated_at,
-            escalationReason: newChatData.escalation_reason,
-            channel: newChatData.channel || "telegram",
-            status: newChatData.status as any,
-            messages: [],
-            labels: [],
-            createdDate: new Date(newChatData.created_at).toLocaleDateString(),
-            tickets: [],
-          };
-
-          setChats((prev) => {
-            if (prev.some((c) => c.id === newChat.id)) return prev;
-            return [newChat, ...prev];
-          });
-
-          playNotificationSound("message", 0.5);
-          toast.info(`New chat from ${newChat.customerName}`, {
-            action: { label: "View", onClick: () => setActiveChat(newChat.id) },
-            duration: 5000,
-          });
-        } catch (error) {
-          console.error("Failed to fetch new chat details:", error);
-        } finally {
-          pendingChatCreations.current.delete(chat_id);
-        }
-        return;
+        await fetchAndPrependChat(chat_id, message_content, data.customer_name);
+        return; // Stop processing message update since we just fetched the whole chat
       }
 
       // === 4. EXISTING CHAT UPDATE LOGIC ===
+      // ... (Rest of existing logic for updating chats list and currentChatMessages)
       setChats((prevChats) => {
         const chatIndex = prevChats.findIndex((chat) => chat.id === chat_id);
         if (chatIndex === -1) return prevChats;
@@ -805,7 +813,7 @@ export const CustomerService = ({
 
         updatedChats[chatIndex] = {
           ...chat,
-          lastMessage: message_content || (attachment ? "[File]" : ""), // Show [File] if content is empty
+          lastMessage: message_content || (attachment ? "[File]" : ""),
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -821,12 +829,10 @@ export const CustomerService = ({
         return updatedChats;
       });
 
-      // === 5. APPEND MESSAGE TO ACTIVE VIEW ===
       if (chat_id === activeChatRef.current) {
         const transformedMessage: Message = {
           id: message_id,
           sender: finalSender,
-          // FIX: Use real sender_name from WS (Fixes "AI Agent" glitch)
           senderName: sender_name || data.customer_name || "Unknown",
           content: message_content,
           timestamp: new Date().toLocaleTimeString([], {
@@ -834,7 +840,6 @@ export const CustomerService = ({
             minute: "2-digit",
           }),
           ticketId: ticket_id || undefined,
-          // FIX: Use attachment directly from WS (Fixes "Image Missing" glitch)
           attachment: attachment,
         };
 
@@ -846,7 +851,7 @@ export const CustomerService = ({
         playNotificationSound("message", 0.5);
       }
     },
-    [fetchAndAddTicket]
+    [fetchAndAddTicket, fetchAndPrependChat]
   );
 
   const handleChatUpdateNotification = useCallback(
@@ -1328,10 +1333,9 @@ export const CustomerService = ({
     customerName: string;
     initialMessage: string;
     assignedAgentId?: string;
+    using_agent_integration_id?: string | null; // <--- ADD PARAMETER
   }) => {
     try {
-      // 1. BEST PRACTICE: Resolve "me" to UUID on Frontend
-      // This ensures we always send a valid UUID to the backend, regardless of backend validation rules.
       let finalAgentId: string | null = null;
       if (data.assignedAgentId === "me" && user?.id) {
         finalAgentId = user.id;
@@ -1349,6 +1353,7 @@ export const CustomerService = ({
         channel: data.channel,
         initial_message: data.initialMessage,
         assigned_agent_id: finalAgentId,
+        using_agent_integration_id: data.using_agent_integration_id,
       });
 
       // 3. UX: Handle "Existing Chat" logic

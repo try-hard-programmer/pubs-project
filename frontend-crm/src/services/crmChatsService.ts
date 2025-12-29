@@ -250,6 +250,7 @@ export const createChat = async (chatData: {
   channel: CommunicationChannel;
   initial_message: string;
   assigned_agent_id?: string | null; // <--- ALLOW NULL
+  using_agent_integration_id?: string | null;
 }): Promise<Chat> => {
   return apiClient.post<Chat>("/crm/chats", chatData);
 };

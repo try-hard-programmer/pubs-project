@@ -1,5 +1,5 @@
-import { supabase } from '@/integrations/supabase/client';
-import { env } from '@/config/env';
+import { supabase } from "@/integrations/supabase/client";
+import { env } from "@/config/env";
 
 /**
  * Centralized API client with automatic JWT token injection
@@ -10,14 +10,16 @@ class ApiClient {
 
   constructor(baseUrl: string) {
     // Remove trailing slash from baseUrl to prevent double slashes
-    this.baseUrl = baseUrl.replace(/\/$/, '');
+    this.baseUrl = baseUrl.replace(/\/$/, "");
   }
 
   /**
    * Get JWT token from Supabase session
    */
   private async getAuthToken(): Promise<string | null> {
-    const { data: { session } } = await supabase.auth.getSession();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
     return session?.access_token || null;
   }
 
@@ -36,18 +38,18 @@ class ApiClient {
 
     // Add Authorization header if token exists
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers["Authorization"] = `Bearer ${token}`;
     }
 
     // Don't set Content-Type for FormData (browser will set it with boundary)
-    if (!(options.body instanceof FormData) && !headers['Content-Type']) {
-      headers['Content-Type'] = 'application/json';
+    if (!(options.body instanceof FormData) && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
     }
 
     const url = `${this.baseUrl}${endpoint}`;
 
     // Log request for debugging (remove in production if needed)
-    console.log(`[API Request] ${options.method || 'GET'} ${url}`);
+    console.log(`[API Request] ${options.method || "GET"} ${url}`);
 
     return fetch(url, {
       ...options,
@@ -61,11 +63,12 @@ class ApiClient {
   async get<T>(endpoint: string, options?: RequestInit): Promise<T> {
     const response = await this.authenticatedFetch(endpoint, {
       ...options,
-      method: 'GET',
+      method: "GET",
     });
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const message = await response.json();
+      const text = message.detail;
       throw new Error(text || `GET request failed (${response.status})`);
     }
 
@@ -82,7 +85,7 @@ class ApiClient {
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
-      method: 'POST',
+      method: "POST",
     };
 
     // Handle FormData vs JSON
@@ -95,21 +98,22 @@ class ApiClient {
     const response = await this.authenticatedFetch(endpoint, requestOptions);
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const message = await response.json();
+      const text = message.detail;
       throw new Error(text || `POST request failed (${response.status})`);
     }
 
     // Handle 204 No Content
     if (response.status === 204) {
-      return { status: 'ok' } as T;
+      return { status: "ok" } as T;
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       return response.json();
     }
 
-    return { status: 'ok' } as T;
+    return { status: "ok" } as T;
   }
 
   /**
@@ -122,7 +126,7 @@ class ApiClient {
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
-      method: 'DELETE',
+      method: "DELETE",
     };
 
     if (body) {
@@ -132,21 +136,22 @@ class ApiClient {
     const response = await this.authenticatedFetch(endpoint, requestOptions);
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const message = await response.json();
+      const text = message.detail;
       throw new Error(text || `DELETE request failed (${response.status})`);
     }
 
     // Handle 204 No Content
     if (response.status === 204) {
-      return { status: 'ok' } as T;
+      return { status: "ok" } as T;
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       return response.json();
     }
 
-    return { status: 'ok' } as T;
+    return { status: "ok" } as T;
   }
 
   /**
@@ -159,7 +164,7 @@ class ApiClient {
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
-      method: 'PUT',
+      method: "PUT",
     };
 
     if (body instanceof FormData) {
@@ -171,21 +176,22 @@ class ApiClient {
     const response = await this.authenticatedFetch(endpoint, requestOptions);
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const message = await response.json();
+      const text = message.detail;
       throw new Error(text || `PUT request failed (${response.status})`);
     }
 
     // Handle 204 No Content
     if (response.status === 204) {
-      return { status: 'ok' } as T;
+      return { status: "ok" } as T;
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       return response.json();
     }
 
-    return { status: 'ok' } as T;
+    return { status: "ok" } as T;
   }
 
   /**
@@ -198,7 +204,7 @@ class ApiClient {
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
-      method: 'PATCH',
+      method: "PATCH",
     };
 
     if (body instanceof FormData) {
@@ -210,21 +216,22 @@ class ApiClient {
     const response = await this.authenticatedFetch(endpoint, requestOptions);
 
     if (!response.ok) {
-      const text = await response.text().catch(() => '');
+      const message = await response.json();
+      const text = message.detail;
       throw new Error(text || `PATCH request failed (${response.status})`);
     }
 
     // Handle 204 No Content
     if (response.status === 204) {
-      return { status: 'ok' } as T;
+      return { status: "ok" } as T;
     }
 
-    const contentType = response.headers.get('content-type') || '';
-    if (contentType.includes('application/json')) {
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
       return response.json();
     }
 
-    return { status: 'ok' } as T;
+    return { status: "ok" } as T;
   }
 }
 

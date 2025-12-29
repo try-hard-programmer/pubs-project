@@ -26,6 +26,7 @@ import {
   Globe,
   Loader2,
   Search,
+  Zap,
 } from "lucide-react";
 import {
   type CommunicationChannel,
@@ -59,6 +60,7 @@ interface NewChatModalProps {
     customerName: string;
     initialMessage: string;
     assignedAgentId?: string;
+    using_agent_integration_id?: string; // FIX: Rename this to match backend
   }) => Promise<void>;
 }
 
@@ -73,6 +75,8 @@ export const NewChatModal = ({
   const [channel, setChannel] = useState<CommunicationChannel>("whatsapp");
   const [initialMessage, setInitialMessage] = useState("");
   const [assignedAgentId, setAssignedAgentId] = useState<string>("unassigned");
+  const [integrationAgentId, setIntegrationAgentId] =
+    useState<string>("unassigned");
   const [isCreating, setIsCreating] = useState(false);
   const [activeTab, setActiveTab] = useState<"existing" | "manual">("existing");
   const [manualName, setManualName] = useState("");
@@ -126,6 +130,8 @@ export const NewChatModal = ({
       setInitialMessage("");
       setErrors({});
       setActiveTab("existing");
+      setAssignedAgentId("select agent");
+      setIntegrationAgentId("select agent integration");
     }
   }, [open]);
 
@@ -319,6 +325,8 @@ export const NewChatModal = ({
         initialMessage: initialMessage.trim(),
         assignedAgentId:
           assignedAgentId !== "unassigned" ? assignedAgentId : undefined,
+        using_agent_integration_id:
+          integrationAgentId !== "unassigned" ? integrationAgentId : undefined,
       });
       handleClose();
     } catch (error) {
@@ -524,7 +532,32 @@ export const NewChatModal = ({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="unassigned">Tidak assign (AI)</SelectItem>
+                <SelectItem value="unassigned">Tidak assign agent</SelectItem>
+                {agents
+                  .filter((agent) => agent.status === "active")
+                  .map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Assign ke Contact Integration Agent</Label>
+            <Select
+              value={integrationAgentId}
+              onValueChange={setIntegrationAgentId}
+              disabled={isCreating}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">
+                  Tidak assign agent integration
+                </SelectItem>
                 {agents
                   .filter((agent) => agent.status === "active")
                   .map((agent) => (
