@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Database } from "@/integrations/supabase/types";
 import { toast } from "sonner";
+import { apiClient } from "@/lib/apiClient";
+import { OrganizationService } from "@/services/organizationService";
 
 type InvitationRow = Database["public"]["Tables"]["user_invitations"]["Row"];
 export interface Invitation extends InvitationRow {}
@@ -126,93 +128,24 @@ export const useUserManagement = () => {
     enabled: !!user,
   });
 
-  // Create and send invitation (Corrected Logic)
+  // Create and send invitation
   const sendInvitationMutation = useMutation({
     mutationFn: async (email: string) => {
       if (!user) throw new Error("Not authenticated");
 
-      // 1. Create Invitation in Database via RPC
-      // This handles permissions and duplicate checks safely on the server
-      const { data: invitationId, error: createError } = await supabase.rpc(
-        "create_user_invitation",
-        {
-          p_email: email,
-          p_invited_by: user.id,
-        }
-      );
-
-      if (createError) {
-        throw new Error(
-          createError.message || "Failed to create invitation in database"
-        );
-      }
-
-      // 2. Fetch the token to build the link
-      const { data: invitation, error: fetchError } = await supabase
-        .from("user_invitations")
-        .select("invitation_token, invited_email, id")
-        .eq("id", invitationId)
-        .single();
-
-      if (fetchError || !invitation) {
-        throw new Error("Invitation created but failed to retrieve token");
-      }
-
-      // 3. Construct the link
-      const origin = window.location.origin;
-      const invitationLink = `${origin}/accept-invitation?token=${invitation.invitation_token}`;
-      console.log("Invitation Link Generated:", invitationLink);
-
-      // 4. Send Email via Edge Function
-      try {
-        const { error: emailError } = await supabase.functions.invoke(
-          "send-invitation",
-          {
-            body: {
-              email: email,
-              invitationLink: invitationLink,
-            },
-          }
-        );
-
-        if (emailError) {
-          console.error("Email sending failed (Edge Function):", emailError);
-          // Return special object to warn user but not fail the whole process
-          return {
-            success: true,
-            message:
-              "Invitation link created, but email could not be sent automatically. Please copy the link manually.",
-            invitationId: invitation.id,
-            invitationLink,
-            emailSent: false,
-          };
-        }
-      } catch (err) {
-        console.error("Email sending failed (Network):", err);
-        return {
-          success: true,
-          message:
-            "Invitation link created, but email delivery failed. Please share the link manually.",
-          invitationId: invitation.id,
-          invitationLink,
-          emailSent: false,
-        };
-      }
-
-      return {
-        success: true,
-        message: "Invitation sent successfully",
-        invitationId: invitation.id,
-        invitationLink,
-        emailSent: true,
-      };
+      // Use the centralized Service instead of direct apiClient call
+      return await OrganizationService.sendInvitation({
+        email,
+        invited_by: user.id,
+      });
     },
-    onSuccess: (data) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["invitations", user?.id] });
-      // Show warning toast if email failed
-      if (data.emailSent === false) {
-        toast.warning(data.message);
-      }
+      toast.success("Invitation sent successfully");
+    },
+    onError: (error: any) => {
+      console.error("Invitation failed:", error);
+      toast.error(error.message || "Failed to send invitation");
     },
   });
 

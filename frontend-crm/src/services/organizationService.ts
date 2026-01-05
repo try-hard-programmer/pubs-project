@@ -3,7 +3,7 @@
  * Handles API calls related to organization management
  */
 
-import { apiClient } from '@/lib/apiClient';
+import { apiClient } from "@/lib/apiClient";
 
 /**
  * Organization interface representing organization entity
@@ -31,6 +31,10 @@ export interface OrganizationMeResponse extends Organization {
   is_owner: boolean;
 }
 
+export interface SendInvitationRequest {
+  email: string;
+  invited_by: string;
+}
 /**
  * Organization Service class
  * Provides methods to interact with organization endpoints
@@ -44,7 +48,7 @@ export class OrganizationService {
    * @throws Error if request fails or user has no organization
    */
   static async getMyOrganization(): Promise<Organization> {
-    return apiClient.get<Organization>('/organizations/me');
+    return apiClient.get<Organization>("/organizations/me");
   }
 
   /**
@@ -68,9 +72,15 @@ export class OrganizationService {
    */
   static async updateOrganization(
     orgId: string,
-    data: Partial<Omit<Organization, 'id' | 'owner_id' | 'created_at' | 'updated_at'>>
+    data: Partial<
+      Omit<Organization, "id" | "owner_id" | "created_at" | "updated_at">
+    >
   ): Promise<Organization> {
     return apiClient.patch<Organization>(`/organizations/${orgId}`, data);
+  }
+
+  static async sendInvitation(data: SendInvitationRequest): Promise<any> {
+    return apiClient.post("/organizations/invite", data);
   }
 }
 

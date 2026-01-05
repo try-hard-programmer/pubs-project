@@ -172,7 +172,8 @@ export const AIChatModal = ({
     !isExpanded && itemsLen > 3;
 
   const { toast } = useToast();
-  const { files } = useFiles();
+  // ❌ BLEED STOPPED: Comment out the unused hook
+  // const { files } = useFiles();
 
   // Load topics from API on mount
   useEffect(() => {

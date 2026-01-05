@@ -771,10 +771,15 @@ export const CustomerService = ({
         ticket_id,
         sender_name,
         sender_type,
-        attachment,
+        attachment: wsAttachment, // Rename incoming attachment to avoid confusion
+        metadata, // Destructure metadata to access high-res URL
       } = data;
 
-      console.log("📩 WebSocket Message Received:", data);
+      // === DEBUG LOGS START ===
+      console.group("📨 WebSocket Message Debug");
+      console.log("1. Raw Data Received:", data);
+      console.log("2. WebSocket Attachment (Low Res?):", wsAttachment);
+      console.log("3. Metadata (High Res?):", metadata);
 
       const chatExists = chatsRef.current.some((c) => c.id === chat_id);
 
@@ -796,14 +801,39 @@ export const CustomerService = ({
         finalSender = "ai";
       }
 
-      // === 3. NEW CHAT LOGIC (Refactored) ===
+      // === 3. NEW CHAT LOGIC ===
       if (!chatExists) {
+        console.log("New chat detected, fetching full details...");
         await fetchAndPrependChat(chat_id, message_content, data.customer_name);
-        return; // Stop processing message update since we just fetched the whole chat
+        console.groupEnd(); // End debug group before returning
+        return;
       }
 
+      // === FIX: Normalize Attachment Data ===
+      // Logic: Prefer metadata.media_url (HD) over wsAttachment.url (Thumbnail)
+      let finalAttachment = wsAttachment;
+
+      if (metadata?.media_url) {
+        console.log("✅ Found High-Res URL in metadata. Using it to fix blur.");
+
+        // Detect type safely
+        const fileType = metadata.media_type || metadata.message_type || "file";
+
+        finalAttachment = {
+          name: metadata.filename || wsAttachment?.name || "Image",
+          url: metadata.media_url,
+          type: fileType,
+        };
+      } else {
+        console.log(
+          "⚠️ No High-Res URL found in metadata. Falling back to WebSocket attachment."
+        );
+      }
+
+      console.log("4. Final Attachment Object Used:", finalAttachment);
+      console.groupEnd(); // === DEBUG LOGS END ===
+
       // === 4. EXISTING CHAT UPDATE LOGIC ===
-      // ... (Rest of existing logic for updating chats list and currentChatMessages)
       setChats((prevChats) => {
         const chatIndex = prevChats.findIndex((chat) => chat.id === chat_id);
         if (chatIndex === -1) return prevChats;
@@ -813,7 +843,7 @@ export const CustomerService = ({
 
         updatedChats[chatIndex] = {
           ...chat,
-          lastMessage: message_content || (attachment ? "[File]" : ""),
+          lastMessage: message_content || (finalAttachment ? "[File]" : ""),
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -829,6 +859,7 @@ export const CustomerService = ({
         return updatedChats;
       });
 
+      // Update the active chat window if it's open
       if (chat_id === activeChatRef.current) {
         const transformedMessage: Message = {
           id: message_id,
@@ -840,7 +871,8 @@ export const CustomerService = ({
             minute: "2-digit",
           }),
           ticketId: ticket_id || undefined,
-          attachment: attachment,
+          attachment: finalAttachment, // <--- Using the fixed attachment
+          metadata: metadata,
         };
 
         setCurrentChatMessages((prev) => {
@@ -1205,8 +1237,9 @@ export const CustomerService = ({
       setAgents((prev) => [...prev, newAgent]);
       toast.success("Agent berhasil ditambahkan");
     } catch (error) {
-      console.error("Error adding agent:", error);
-      toast.error("Gagal menambahkan agent. Silakan coba lagi.");
+      toast.error(
+        error.message || "Gagal menambahkan agent. Silakan coba lagi."
+      );
     }
   };
 
@@ -1222,7 +1255,7 @@ export const CustomerService = ({
       setAgents((prev) =>
         prev.map((agent) => (agent.id === agentId ? updatedAgent : agent))
       );
-      toast.success("Status agent berhasil diupdate");
+      toast.success(`Status agent berhasil diupdate ke ${status}`);
     } catch (error) {
       console.error("Error updating agent status:", error);
       toast.error("Gagal mengupdate status agent. Silakan coba lagi.");
@@ -1502,14 +1535,6 @@ export const CustomerService = ({
       toast.error("Gagal menghapus agent. Silakan coba lagi.");
     }
   };
-
-  const allTickets = chats.flatMap((chat) =>
-    (chat.tickets || []).map((ticket) => ({
-      ...ticket,
-      customerName: chat.customerName,
-      chatId: chat.id,
-    }))
-  );
 
   return (
     <div

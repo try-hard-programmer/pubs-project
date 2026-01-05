@@ -57,6 +57,7 @@ export interface WebSocketNewMessage extends WebSocketMessage {
       type: string;
       name: string;
     };
+    metadata?: any;
     channel:
       | "whatsapp"
       | "telegram"
@@ -354,6 +355,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
 
           // Defensive: Only handle message if connection is still active
           if (ws.readyState !== WebSocket.OPEN) {
+            return;
+          }
+
+          // ✅ FIX: Cast to 'any' to bypass the strict type check
+          if (
+            (notification as any).type === "ping" ||
+            (notification as any).type === "pong"
+          ) {
             return;
           }
 

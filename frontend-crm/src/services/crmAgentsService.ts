@@ -387,7 +387,7 @@ export async function createAgent(
     return transformAgentToFrontend(backendAgent);
   } catch (error) {
     console.error("[CRM Agents Service] Error creating agent:", error);
-    throw new Error("Failed to create agent. Please try again.");
+    throw new Error(error.message || "Failed to create agent.");
   }
 }
 

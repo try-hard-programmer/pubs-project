@@ -40,7 +40,7 @@ export const FloatingAIButton = () => {
                 <div className="relative z-10">
                   <Brain
                     className={`w-8 h-8 transition-all duration-500 ${
-                      isHovered ? 'scale-125 rotate-6' : ''
+                      isHovered ? "scale-125 rotate-6" : ""
                     }`}
                   />
                 </div>
@@ -50,10 +50,7 @@ export const FloatingAIButton = () => {
               </Button>
             </div>
           </TooltipTrigger>
-          <TooltipContent
-            side="left"
-            className="mr-4 font-semibold"
-          >
+          <TooltipContent side="left" className="mr-4 font-semibold">
             <p className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
               <span>Ask AI Assistant</span>
@@ -62,11 +59,13 @@ export const FloatingAIButton = () => {
         </Tooltip>
       </TooltipProvider>
 
-      <AIChatModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        userEmail={user.email}
-      />
+      {isModalOpen && (
+        <AIChatModal
+          open={isModalOpen}
+          onOpenChange={setIsModalOpen}
+          userEmail={user.email}
+        />
+      )}
     </>
   );
 };

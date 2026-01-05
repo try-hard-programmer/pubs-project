@@ -95,8 +95,23 @@ export const UserManagement = () => {
 
   const handleResendInvitation = async (email: string) => {
     try {
-      await resendInvitation(email);
-      toast.success("Invitation resent successfully!");
+      // ✅ FIX: Capture the result from the hook
+      const result = await resendInvitation(email);
+
+      // ✅ FIX: Check if email failed and show the link manually
+      if (result.emailSent === false) {
+        toast.warning("Email delivery failed, but a new link was generated.");
+      } else {
+        toast.success("Invitation resent successfully!");
+      }
+
+      // ✅ FIX: Always allow copying the new link
+      if (result.invitationLink) {
+        navigator.clipboard.writeText(result.invitationLink);
+        toast.info("New invitation link copied to clipboard", {
+          description: "You can share this link directly",
+        });
+      }
     } catch (error: any) {
       toast.error(error.message || "Failed to resend invitation");
     }

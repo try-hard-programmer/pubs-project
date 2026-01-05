@@ -283,7 +283,7 @@ export const ChatWindow = ({
           <img
             src={attachment.url}
             alt={attachment.name}
-            className="max-w-[240px] max-h-[240px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
+            className="max-w-[240px] max-h-[240px] w-auto h-auto object-contain cursor-pointer hover:opacity-90 transition-opacity"
             onClick={() => window.open(attachment.url, "_blank")}
           />
         </div>
