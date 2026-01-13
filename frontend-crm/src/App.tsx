@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound";
 import { AuthPage } from "./pages/AuthPage";
 import { AcceptInvitation } from "./pages/AcceptInvitation";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ResetPassword } from "./pages/ResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +20,7 @@ const App = () => (
       <Routes>
         {/* Public Routes */}
         <Route path="/auth" element={<AuthPage />} />
+        <Route path="/auth/reset-password" element={<ResetPassword />} />
         <Route path="/accept-invitation" element={<AcceptInvitation />} />
 
         {/* Protected Routes (Wrapped) */}

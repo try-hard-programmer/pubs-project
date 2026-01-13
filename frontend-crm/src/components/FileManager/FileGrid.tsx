@@ -358,14 +358,25 @@ export const FileGrid = ({
 
   // useEffect terpisah untuk sync dengan files saat tidak ada search
   useEffect(() => {
-    // Saat files berubah dan tidak ada search query, sync langsung
+    // Only sync if no search query
     if (!searchQuery || searchQuery.trim() === "") {
-      console.log("Files changed without search, syncing", {
-        filesCount: files?.length,
+      const newFiles = files || [];
+
+      // Prevent infinite loop: Only update if length or first item ID differs
+      setFilteredFiles((prev) => {
+        if (
+          prev.length === newFiles.length &&
+          prev[0]?.id === newFiles[0]?.id
+        ) {
+          return prev; // Return same reference to skip re-render
+        }
+        console.log("Files changed without search, syncing", {
+          filesCount: newFiles.length,
+        });
+        return newFiles;
       });
-      setFilteredFiles(files || []);
     }
-  }, [files]);
+  }, [files, searchQuery]);
 
   // useEffect Button Trigger Empety Trash.
   useEffect(() => {

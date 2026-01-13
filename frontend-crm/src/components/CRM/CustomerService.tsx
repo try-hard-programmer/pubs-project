@@ -559,14 +559,19 @@ export const CustomerService = ({
         // ... inside fetchChatDetails ...
         const transformedMessages: Message[] = messagesResponse.messages.map(
           (apiMsg) => {
+            // 1. Determine Sender Role
             let senderRole: "customer" | "agent" | "ai" = "customer";
-            const type = String(apiMsg.sender_type || "");
+            const type = String(apiMsg.sender_type || "").toLowerCase();
 
-            if (type === "agent" || type === "human") senderRole = "agent";
-            else if (type === "ai") senderRole = "ai";
-            else senderRole = "customer";
+            if (type === "agent" || type === "human" || type === "admin") {
+              senderRole = "agent";
+            } else if (type === "ai" || type === "bot" || type === "system") {
+              senderRole = "ai";
+            } else {
+              senderRole = "customer";
+            }
 
-            // FIX: Check ALL possible type fields from your payload
+            // 2. Handle Attachment Logic
             let fileType = "application/octet-stream";
             if (apiMsg.metadata) {
               fileType =
@@ -579,21 +584,49 @@ export const CustomerService = ({
               ? {
                   name: apiMsg.metadata.filename || "Attachment",
                   url: apiMsg.metadata.media_url,
-                  type: fileType, // Pass the detected type
+                  type: fileType,
                 }
               : undefined;
 
+            // 3. CLEAN CONTENT LOGIC (THE FIX)
+            let contentToDisplay = apiMsg.content || "";
+
+            // Rule A: If content is exactly the URL, hide it
+            if (attachment && contentToDisplay === attachment.url) {
+              contentToDisplay = "";
+            }
+
+            // Rule B: AGGRESSIVE Base64/Raw Data Cleaning
+            // This prevents the /9j/... string from showing
+            if (
+              contentToDisplay.startsWith("data:image") ||
+              contentToDisplay.startsWith("data:application") ||
+              contentToDisplay.startsWith("/9j/") || // JPEG Base64 Header
+              contentToDisplay.startsWith("iVBOR") || // PNG Base64 Header
+              contentToDisplay.startsWith("R0lGOD") || // GIF Base64 Header
+              contentToDisplay.startsWith("JVBER") || // PDF Base64 Header
+              (contentToDisplay.length > 500 && !contentToDisplay.includes(" ")) // Catch-all for long strings without spaces
+            ) {
+              console.warn(
+                "⚠️ Hiding raw Base64 content for message:",
+                apiMsg.id
+              );
+              contentToDisplay = "";
+            }
+
+            // 4. Return Final Message Object
             return {
               id: apiMsg.id,
               sender: senderRole,
               senderName: apiMsg.sender_name || "Unknown",
-              content: apiMsg.content,
+              content: contentToDisplay, // <--- Using the cleaned content
               timestamp: new Date(apiMsg.created_at).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
               }),
               ticketId: apiMsg.ticket_id || undefined,
               attachment: attachment,
+              metadata: apiMsg.metadata,
             };
           }
         );
@@ -775,11 +808,74 @@ export const CustomerService = ({
         metadata, // Destructure metadata to access high-res URL
       } = data;
 
-      // === DEBUG LOGS START ===
+      // === DEBUG LOGS ===
       console.group("📨 WebSocket Message Debug");
       console.log("1. Raw Data Received:", data);
-      console.log("2. WebSocket Attachment (Low Res?):", wsAttachment);
-      console.log("3. Metadata (High Res?):", metadata);
+      console.log("2. WebSocket Attachment:", wsAttachment);
+      console.log("3. Metadata:", JSON.stringify(metadata, null, 2));
+
+      // 1. Initial Content Extraction (Try standard fields first)
+      let finalContent =
+        message_content ||
+        metadata?.caption ||
+        metadata?.text ||
+        metadata?.body ||
+        "";
+
+      // 2. CLEANING LOGIC: Filter out raw Base64 or technical strings
+      // This prevents the UI from showing massive text blocks if the backend sends raw file data
+      if (
+        finalContent.startsWith("data:image") ||
+        finalContent.startsWith("data:application") ||
+        finalContent.startsWith("/9j/") || // JPEG Base64 signature
+        finalContent.startsWith("iVBOR") || // PNG Base64 signature
+        (finalContent.length > 500 && !finalContent.includes(" ")) // Heuristic: Long string with no spaces is likely raw data
+      ) {
+        console.warn(
+          "🧹 Filtered out raw Base64/File content from WebSocket payload"
+        );
+        finalContent = "";
+      }
+
+      // 3. SELF-HEALING LOGIC: Fetch missing caption
+      // If it's a media message but content is empty (or was cleaned), check API
+      const hasMedia =
+        wsAttachment ||
+        metadata?.media_url ||
+        metadata?.message_type === "image" ||
+        metadata?.message_type === "video";
+
+      if (!finalContent && hasMedia) {
+        console.log(
+          "🕵️‍♂️ Media message has no text. Querying API for potential missing caption..."
+        );
+        try {
+          const response = await crmChatsService.getChatMessages(chat_id);
+          const correctMessage = response.messages.find(
+            (m: any) => m.id === message_id
+          );
+
+          if (correctMessage && correctMessage.content) {
+            // Apply the same cleaning logic to the API result just in case
+            let apiContent = correctMessage.content;
+            if (
+              apiContent.startsWith("data:image") ||
+              apiContent.startsWith("/9j/") ||
+              (apiContent.length > 500 && !apiContent.includes(" "))
+            ) {
+              apiContent = "";
+            }
+
+            if (apiContent) {
+              console.log("✅ Caption recovered from API:", apiContent);
+              finalContent = apiContent;
+            }
+          }
+        } catch (error) {
+          console.error("❌ Failed to recover caption:", error);
+        }
+      }
+      console.groupEnd();
 
       const chatExists = chatsRef.current.some((c) => c.id === chat_id);
 
@@ -804,36 +900,22 @@ export const CustomerService = ({
       // === 3. NEW CHAT LOGIC ===
       if (!chatExists) {
         console.log("New chat detected, fetching full details...");
-        await fetchAndPrependChat(chat_id, message_content, data.customer_name);
-        console.groupEnd(); // End debug group before returning
+        await fetchAndPrependChat(chat_id, finalContent, data.customer_name);
         return;
       }
 
-      // === FIX: Normalize Attachment Data ===
-      // Logic: Prefer metadata.media_url (HD) over wsAttachment.url (Thumbnail)
+      // === 4. ATTACHMENT NORMALIZATION ===
       let finalAttachment = wsAttachment;
-
       if (metadata?.media_url) {
-        console.log("✅ Found High-Res URL in metadata. Using it to fix blur.");
-
-        // Detect type safely
         const fileType = metadata.media_type || metadata.message_type || "file";
-
         finalAttachment = {
-          name: metadata.filename || wsAttachment?.name || "Image",
+          name: metadata.filename || wsAttachment?.name || "Media Attachment",
           url: metadata.media_url,
           type: fileType,
         };
-      } else {
-        console.log(
-          "⚠️ No High-Res URL found in metadata. Falling back to WebSocket attachment."
-        );
       }
 
-      console.log("4. Final Attachment Object Used:", finalAttachment);
-      console.groupEnd(); // === DEBUG LOGS END ===
-
-      // === 4. EXISTING CHAT UPDATE LOGIC ===
+      // === 5. UPDATE CHAT LIST ===
       setChats((prevChats) => {
         const chatIndex = prevChats.findIndex((chat) => chat.id === chat_id);
         if (chatIndex === -1) return prevChats;
@@ -843,7 +925,8 @@ export const CustomerService = ({
 
         updatedChats[chatIndex] = {
           ...chat,
-          lastMessage: message_content || (finalAttachment ? "[File]" : ""),
+          // Use finalContent (cleaned and recovered)
+          lastMessage: finalContent || (finalAttachment ? "[File]" : ""),
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -859,19 +942,19 @@ export const CustomerService = ({
         return updatedChats;
       });
 
-      // Update the active chat window if it's open
+      // === 6. UPDATE ACTIVE CHAT WINDOW ===
       if (chat_id === activeChatRef.current) {
         const transformedMessage: Message = {
           id: message_id,
           sender: finalSender,
           senderName: sender_name || data.customer_name || "Unknown",
-          content: message_content,
+          content: finalContent, // Use finalContent
           timestamp: new Date().toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
           }),
           ticketId: ticket_id || undefined,
-          attachment: finalAttachment, // <--- Using the fixed attachment
+          attachment: finalAttachment,
           metadata: metadata,
         };
 

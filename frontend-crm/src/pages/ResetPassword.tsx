@@ -67,7 +67,10 @@ export const ResetPassword = () => {
 
       toast.success("Password updated successfully! Please sign in.");
       await supabase.auth.signOut(); // Force re-login for security
-      navigate("/auth");
+
+      // Use replace: true to clear the history stack and ensure the recovery hash
+      // is completely removed so AuthPage doesn't detect "Recovery Mode"
+      navigate("/auth", { replace: true });
     } catch (error: any) {
       toast.error("Failed to update password: " + error.message);
     } finally {

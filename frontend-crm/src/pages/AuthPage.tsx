@@ -1,3 +1,4 @@
+// frontend-crm/src/pages/AuthPage.tsx
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -74,9 +75,33 @@ export const AuthPage = () => {
     };
   }, [navigate]);
 
-  // ✅ 2. URL CLEANUP (Instant, No Timeout)
+  // ✅ 2. URL CLEANUP & ERROR HANDLING (Updated)
   useEffect(() => {
     const { hash, search } = window.location;
+
+    // A. Check for specific error descriptions in the URL (e.g. "Token expired")
+    // Supabase often sends errors like #error_description=Email+link+is+invalid...
+    const hashParams = new URLSearchParams(hash.substring(1));
+    const searchParams = new URLSearchParams(search);
+    const errorDescription =
+      hashParams.get("error_description") ||
+      searchParams.get("error_description");
+
+    if (errorDescription) {
+      console.log("❌ Auth Error Detected in URL:", errorDescription);
+      toast.error("Authentication Failed", {
+        description: decodeURIComponent(errorDescription).replace(/\+/g, " "),
+        duration: 5000,
+      });
+
+      // Clear the error from URL to prevent confusion
+      const newUrl =
+        window.location.href.split("?")[0].split("#")[0] + "#/auth";
+      window.history.replaceState(null, "", newUrl);
+      return; // Stop here, no need to check for tokens if we have an error
+    }
+
+    // B. Standard Token Cleanup
     // Strictly check for recovery flow to avoid breaking it
     const isRecovery =
       hash.includes("type=recovery") || search.includes("type=recovery");
