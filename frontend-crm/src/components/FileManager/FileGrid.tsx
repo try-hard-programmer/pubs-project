@@ -19,6 +19,7 @@ import {
   Home,
   Loader2,
   Settings,
+  ShareIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -1059,8 +1060,30 @@ export const FileGrid = ({
                         onClick={() => handleBulkMove(null)}
                         disabled={handleLoading}
                       >
-                        <Home className="w-4 h-4 mr-2" />
-                        My Drive
+                        {previousSection == "all" && (
+                          <>
+                            <Home className="w-4 h-4 mr-2" />
+                            My Drive
+                          </>
+                        )}
+                        {previousSection == "shared" && (
+                          <>
+                            <ShareIcon className="w-4 h-4 mr-2" />
+                            Shared
+                          </>
+                        )}
+                        {previousSection == "starred" && (
+                          <>
+                            <Star className="w-4 h-4 mr-2" />
+                            Starred
+                          </>
+                        )}
+                        {previousSection == "trashed" && (
+                          <>
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Trash
+                          </>
+                        )}
                       </DropdownMenuItem>
                     )}
                     {foldersCandidates.map((folder) => (

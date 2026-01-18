@@ -94,22 +94,39 @@ export const OrganizationSettings = () => {
   // Get first organization (or you can let user select)
   const firstOrg = userRoles.length > 0 ? userRoles[0] : null;
 
+  // useEffect(() => {
+  //   if (orgName) {
+  //     // Only allow letters (including Unicode letters for international names) and spaces
+  //     const isValid = /^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(orgName);
+  //     setorgNameValid(isValid);
+  //   } else {
+  //     setorgNameValid(true); // Empty is valid (will be caught by required)
+  //   }
+  //   if (groupNameValid) {
+  //     // Only allow letters (including Unicode letters for international names) and spaces
+  //     const isValid = /^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(groupName);
+  //     setGroupNameValid(isValid);
+  //   } else {
+  //     setGroupNameValid(true); // Empty is valid (will be caught by required)
+  //   }
+  // }, [orgName, groupNameValid]);
   useEffect(() => {
     if (orgName) {
-      // Only allow letters (including Unicode letters for international names) and spaces
       const isValid = /^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(orgName);
       setorgNameValid(isValid);
     } else {
-      setorgNameValid(true); // Empty is valid (will be caught by required)
+      setorgNameValid(true);
     }
-    if (groupNameValid) {
-      // Only allow letters (including Unicode letters for international names) and spaces
+  }, [orgName]);
+
+  useEffect(() => {
+    if (groupName) {
       const isValid = /^[a-zA-Z\s\u00C0-\u024F\u1E00-\u1EFF]+$/.test(groupName);
       setGroupNameValid(isValid);
     } else {
-      setGroupNameValid(true); // Empty is valid (will be caught by required)
+      setGroupNameValid(true);
     }
-  }, [orgName, groupNameValid]);
+  }, [groupName]);
 
   // Check if string contains emoji or invalid characters
   const isValidOrgName = (text: string): boolean => {
@@ -444,7 +461,11 @@ export const OrganizationSettings = () => {
           onCollapseChange={setIsSidebarCollapsed}
         />
 
-        <div className={`min-h-screen bg-background ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
+        <div
+          className={`min-h-screen bg-background ${
+            isSidebarCollapsed ? "ml-20" : "ml-64"
+          } transition-all duration-300`}
+        >
           <div className="overflow-auto bg-background p-6">
             <div className="max-w-7xl mx-auto">
               <div className="animate-pulse space-y-4">
@@ -469,7 +490,11 @@ export const OrganizationSettings = () => {
           onCollapseChange={setIsSidebarCollapsed}
         />
 
-        <div className={`min-h-screen bg-background ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
+        <div
+          className={`min-h-screen bg-background ${
+            isSidebarCollapsed ? "ml-20" : "ml-64"
+          } transition-all duration-300`}
+        >
           <div className="overflow-auto bg-background p-6">
             <div className="max-w-7xl mx-auto">
               <Card>
@@ -501,7 +526,11 @@ export const OrganizationSettings = () => {
         onCollapseChange={setIsSidebarCollapsed}
       />
 
-      <div className={`min-h-screen bg-background ${isSidebarCollapsed ? 'ml-20' : 'ml-64'} transition-all duration-300`}>
+      <div
+        className={`min-h-screen bg-background ${
+          isSidebarCollapsed ? "ml-20" : "ml-64"
+        } transition-all duration-300`}
+      >
         <div className="overflow-auto bg-background p-6">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* Header */}
