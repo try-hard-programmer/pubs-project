@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,15 +33,27 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import * as mcpService from "@/services/mcpService";
+import * as crmAgentsService from "@/services/crmAgentsService";
+import { toast } from "sonner";
 
 interface MCPIntegrationProps {
+  agentId: string;
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
-  config: Record<string, any>;
-  onConfigUpdate: (config: Record<string, any>) => void;
+  config: {
+    servers?: MCPServer[];
+  };
+  onConfigUpdate: (config: { servers: MCPServer[] }) => void;
 }
 
-type ConnectionStatus = "disconnected" | "testing" | "connected" | "error";
+type TransportType = "http" | "sse" | "stdio";
+type ConnectionStatus =
+  | "disconnected"
+  | "connecting"
+  | "connected"
+  | "error"
+  | "testing";
 
 interface MCPServer {
   id: string;
@@ -50,6 +68,7 @@ interface MCPServer {
 }
 
 export const MCPIntegration = ({
+  agentId,
   enabled,
   onToggle,
   config,
@@ -94,27 +113,36 @@ export const MCPIntegration = ({
   };
 
   const handleAddServer = () => {
-    setErrorMessage("");
-
-    if (!validateServerForm()) {
+    if (!newServer.name || !newServer.url) {
+      setErrorMessage("Name and URL are required");
       return;
+    }
+
+    try {
+      new URL(newServer.url);
+    } catch (e) {
+      if (newServer.transport !== "stdio") {
+        setErrorMessage("Invalid URL format");
+        return;
+      }
     }
 
     const server: MCPServer = {
       id: Date.now().toString(),
       name: newServer.name!,
       url: newServer.url!,
+      transport: (newServer.transport as TransportType) || "http",
       apiKey: newServer.apiKey || "",
       description: newServer.description || "",
-      transport: (newServer.transport as "stdio" | "sse" | "http") || "http",
       status: "disconnected",
+      capabilities: [],
     };
 
     const updatedServers = [...servers, server];
     setServers(updatedServers);
-    onConfigUpdate({ ...config, servers: updatedServers });
+    onConfigUpdate({ servers: updatedServers });
 
-    // Reset form
+    // Reset form completely (prevents controlled/uncontrolled warnings)
     setNewServer({
       name: "",
       url: "",
@@ -122,56 +150,92 @@ export const MCPIntegration = ({
       description: "",
       transport: "http",
     });
-    setIsAddingServer(false);
+
+    setIsAddingServer(false); // ✅ FIXED: Uses the correct state variable
+    setErrorMessage("");
+
+    // Persist changes
+    persistMCPSettings(updatedServers, enabled);
+  };
+
+  const handleDeleteServer = (id: string) => {
+    const updatedServers = servers.filter((s) => s.id !== id);
+    setServers(updatedServers);
+    onConfigUpdate({ servers: updatedServers });
+    persistMCPSettings(updatedServers, enabled);
   };
 
   const handleTestConnection = async (serverId: string) => {
+    const server = servers.find((s) => s.id === serverId);
+    if (!server) return;
+
     setTestingServerId(serverId);
     setErrorMessage("");
 
-    // Update server status to testing
-    const updatedServers = servers.map((s) =>
-      s.id === serverId ? { ...s, status: "testing" as ConnectionStatus } : s
+    // Update UI to testing state
+    const testingServers = servers.map((s) =>
+      s.id === serverId ? { ...s, status: "testing" as ConnectionStatus } : s,
     );
-    setServers(updatedServers);
+    setServers(testingServers);
 
-    // Simulate MCP server connection test (in real app, this would call backend)
-    setTimeout(() => {
-      // Simulate 80% success rate
-      if (Math.random() > 0.2) {
+    try {
+      // REAL API CALL
+      const result = await mcpService.testConnection({
+        url: server.url,
+        transport: server.transport,
+        apiKey: server.apiKey,
+      });
+
+      if (result.success && result.status === "connected") {
         const connectedServers = servers.map((s) =>
           s.id === serverId
             ? {
                 ...s,
                 status: "connected" as ConnectionStatus,
                 lastConnected: new Date().toISOString(),
-                capabilities: [
-                  "tools/list",
-                  "tools/call",
-                  "prompts/list",
-                  "resources/list",
-                  "resources/read",
-                ],
+                capabilities: result.capabilities,
               }
-            : s
+            : s,
         );
         setServers(connectedServers);
-        onConfigUpdate({ ...config, servers: connectedServers });
+        onConfigUpdate({ servers: connectedServers });
+
+        // Persist success state
+        persistMCPSettings(connectedServers, enabled);
+
+        toast.success(`Connected to ${server.name} (${result.latency_ms}ms)`);
       } else {
-        const errorServers = servers.map((s) =>
-          s.id === serverId ? { ...s, status: "error" as ConnectionStatus } : s
-        );
-        setServers(errorServers);
-        setErrorMessage(`Failed to connect to ${servers.find((s) => s.id === serverId)?.name}`);
+        throw new Error("Connection reported failure");
       }
+    } catch (error: any) {
+      console.error("MCP Connection Failed:", error);
+      const errorServers = servers.map((s) =>
+        s.id === serverId ? { ...s, status: "error" as ConnectionStatus } : s,
+      );
+      setServers(errorServers);
+      setErrorMessage(error.message || `Failed to connect to ${server.name}`);
+      toast.error("Connection failed");
+    } finally {
       setTestingServerId(null);
-    }, 2000);
+    }
   };
 
-  const handleRemoveServer = (serverId: string) => {
-    const updatedServers = servers.filter((s) => s.id !== serverId);
-    setServers(updatedServers);
-    onConfigUpdate({ ...config, servers: updatedServers });
+  const persistMCPSettings = async (
+    currentServers: MCPServer[],
+    isEnabled: boolean,
+  ) => {
+    try {
+      await crmAgentsService.updateAgentIntegration(agentId, "mcp", {
+        enabled: isEnabled,
+        config: { servers: currentServers },
+        status: currentServers.some((s) => s.status === "connected")
+          ? "connected"
+          : "disconnected",
+      });
+    } catch (error) {
+      console.error("Failed to save MCP settings:", error);
+      toast.error("Gagal menyimpan konfigurasi MCP");
+    }
   };
 
   const toggleApiKeyVisibility = (serverId: string) => {
@@ -221,7 +285,10 @@ export const MCPIntegration = ({
       http: "bg-green-100 text-green-700 border-green-200",
     };
     return (
-      <Badge variant="outline" className={colors[transport as keyof typeof colors]}>
+      <Badge
+        variant="outline"
+        className={colors[transport as keyof typeof colors]}
+      >
         {transport.toUpperCase()}
       </Badge>
     );
@@ -236,7 +303,8 @@ export const MCPIntegration = ({
             <div>
               <CardTitle>MCP (Model Context Protocol)</CardTitle>
               <CardDescription>
-                Connect agent dengan external MCP servers untuk extended capabilities
+                Connect agent dengan external MCP servers untuk extended
+                capabilities
               </CardDescription>
             </div>
           </div>
@@ -250,9 +318,9 @@ export const MCPIntegration = ({
           <Alert className="bg-indigo-50 border-indigo-200">
             <Info className="h-4 w-4 text-indigo-600" />
             <AlertDescription className="text-indigo-800 text-xs">
-              <strong>MCP (Model Context Protocol)</strong> memungkinkan agent terhubung ke
-              external servers untuk mengakses tools, prompts, dan resources tambahan. Baca
-              dokumentasi di{" "}
+              <strong>MCP (Model Context Protocol)</strong> memungkinkan agent
+              terhubung ke external servers untuk mengakses tools, prompts, dan
+              resources tambahan. Baca dokumentasi di{" "}
               <a
                 href="https://modelcontextprotocol.io"
                 target="_blank"
@@ -272,7 +340,8 @@ export const MCPIntegration = ({
               <span className="text-sm font-medium">Connected Servers:</span>
             </div>
             <Badge variant="outline">
-              {servers.filter((s) => s.status === "connected").length} / {servers.length}
+              {servers.filter((s) => s.status === "connected").length} /{" "}
+              {servers.length}
             </Badge>
           </div>
 
@@ -287,7 +356,9 @@ export const MCPIntegration = ({
           {/* Server List */}
           {servers.length > 0 && (
             <div className="space-y-3">
-              <Label className="text-sm font-semibold">Configured MCP Servers</Label>
+              <Label className="text-sm font-semibold">
+                Configured MCP Servers
+              </Label>
               {servers.map((server) => (
                 <Card key={server.id} className="border-2">
                   <CardContent className="p-4 space-y-3">
@@ -314,7 +385,7 @@ export const MCPIntegration = ({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRemoveServer(server.id)}
+                          onClick={() => handleDeleteServer(server.id)}
                           disabled={testingServerId === server.id}
                         >
                           <Trash2 className="h-4 w-4 text-red-500" />
@@ -351,7 +422,11 @@ export const MCPIntegration = ({
                         <Label className="text-xs">Capabilities:</Label>
                         <div className="flex flex-wrap gap-1">
                           {server.capabilities.map((cap, idx) => (
-                            <Badge key={idx} variant="outline" className="text-xs py-0">
+                            <Badge
+                              key={idx}
+                              variant="outline"
+                              className="text-xs py-0"
+                            >
                               {cap}
                             </Badge>
                           ))}
@@ -370,7 +445,9 @@ export const MCPIntegration = ({
                     {/* Test Connection Button */}
                     <Button
                       size="sm"
-                      variant={server.status === "connected" ? "outline" : "default"}
+                      variant={
+                        server.status === "connected" ? "outline" : "default"
+                      }
                       onClick={() => handleTestConnection(server.id)}
                       disabled={testingServerId === server.id}
                       className="w-full gap-2"
@@ -430,32 +507,39 @@ export const MCPIntegration = ({
                     placeholder="e.g., Filesystem Tools, Database Access"
                     value={newServer.name}
                     onChange={(e) =>
-                      setNewServer((prev) => ({ ...prev, name: e.target.value }))
+                      setNewServer((prev) => ({
+                        ...prev,
+                        name: e.target.value,
+                      }))
                     }
                   />
                 </div>
 
                 {/* Transport Type */}
                 <div className="space-y-2">
-                  <Label htmlFor="transport">Transport Protocol</Label>
+                  <Label>Transport</Label>
                   <Select
                     value={newServer.transport}
-                    onValueChange={(value) =>
-                      setNewServer((prev) => ({ ...prev, transport: value }))
+                    onValueChange={(val) =>
+                      setNewServer((prev) => ({
+                        ...prev,
+                        transport: val as TransportType,
+                      }))
                     }
                   >
-                    <SelectTrigger id="transport">
+                    <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="http">HTTP (REST API)</SelectItem>
-                      <SelectItem value="sse">SSE (Server-Sent Events)</SelectItem>
-                      <SelectItem value="stdio">STDIO (Standard I/O)</SelectItem>
+                      <SelectItem value="http">HTTP (SSE/Post)</SelectItem>
+                      <SelectItem value="sse">
+                        SSE (Server-Sent Events)
+                      </SelectItem>
+                      <SelectItem value="stdio">
+                        STDIO (Local Process)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    HTTP untuk most cases, SSE untuk real-time, STDIO untuk local processes
-                  </p>
                 </div>
 
                 {/* Server URL */}
@@ -472,7 +556,8 @@ export const MCPIntegration = ({
                     }
                   />
                   <p className="text-xs text-muted-foreground">
-                    HTTP/HTTPS untuk REST, WS/WSS untuk WebSocket, atau command untuk STDIO
+                    HTTP/HTTPS untuk REST, WS/WSS untuk WebSocket, atau command
+                    untuk STDIO
                   </p>
                 </div>
 
@@ -485,7 +570,10 @@ export const MCPIntegration = ({
                     placeholder="Enter API key if required"
                     value={newServer.apiKey}
                     onChange={(e) =>
-                      setNewServer((prev) => ({ ...prev, apiKey: e.target.value }))
+                      setNewServer((prev) => ({
+                        ...prev,
+                        apiKey: e.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -499,7 +587,10 @@ export const MCPIntegration = ({
                     rows={2}
                     value={newServer.description}
                     onChange={(e) =>
-                      setNewServer((prev) => ({ ...prev, description: e.target.value }))
+                      setNewServer((prev) => ({
+                        ...prev,
+                        description: e.target.value,
+                      }))
                     }
                   />
                 </div>
@@ -542,18 +633,30 @@ export const MCPIntegration = ({
               <h4 className="font-semibold text-sm">Example MCP Servers:</h4>
               <div className="space-y-2 text-xs text-muted-foreground">
                 <div className="p-2 bg-background rounded border">
-                  <p className="font-medium text-foreground mb-1">Filesystem Server</p>
-                  <code className="text-xs">npx -y @modelcontextprotocol/server-filesystem</code>
+                  <p className="font-medium text-foreground mb-1">
+                    Filesystem Server
+                  </p>
+                  <code className="text-xs">
+                    npx -y @modelcontextprotocol/server-filesystem
+                  </code>
                   <p className="mt-1">Provides file read/write capabilities</p>
                 </div>
                 <div className="p-2 bg-background rounded border">
-                  <p className="font-medium text-foreground mb-1">GitHub Server</p>
-                  <code className="text-xs">npx -y @modelcontextprotocol/server-github</code>
+                  <p className="font-medium text-foreground mb-1">
+                    GitHub Server
+                  </p>
+                  <code className="text-xs">
+                    npx -y @modelcontextprotocol/server-github
+                  </code>
                   <p className="mt-1">Access GitHub repositories and issues</p>
                 </div>
                 <div className="p-2 bg-background rounded border">
-                  <p className="font-medium text-foreground mb-1">PostgreSQL Server</p>
-                  <code className="text-xs">npx -y @modelcontextprotocol/server-postgres</code>
+                  <p className="font-medium text-foreground mb-1">
+                    PostgreSQL Server
+                  </p>
+                  <code className="text-xs">
+                    npx -y @modelcontextprotocol/server-postgres
+                  </code>
                   <p className="mt-1">Database query and management</p>
                 </div>
               </div>

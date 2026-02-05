@@ -47,7 +47,7 @@ export const CreateTicketDialog = ({
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof Ticket, string>>>(
-    {}
+    {},
   );
 
   const handleChange = (field: keyof Ticket, value: any) => {
@@ -65,6 +65,7 @@ export const CreateTicketDialog = ({
 
   const validateForm = (): boolean => {
     const newErrors: Partial<Record<keyof Ticket, string>> = {};
+    const emojiRegex = /\p{Extended_Pictographic}/u;
 
     // Strict Title Validation
     const title = formData.title.trim();
@@ -74,6 +75,8 @@ export const CreateTicketDialog = ({
       newErrors.title = "Title must be at least 5 characters";
     } else if (title.length > 100) {
       newErrors.title = "Title must be less than 100 characters";
+    } else if (emojiRegex.test(title)) {
+      newErrors.title = "Emojis are not allowed in the title";
     }
 
     // Strict Description Validation

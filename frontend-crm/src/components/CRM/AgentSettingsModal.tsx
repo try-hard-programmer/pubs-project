@@ -121,7 +121,7 @@ interface WorkingHours {
 
 interface ChannelIntegration {
   enabled: boolean;
-  config: Record<string, string>;
+  config: Record<string, any>;
 }
 
 interface AgentSettingsModalProps {
@@ -293,7 +293,7 @@ export const AgentSettingsModal = ({
                       };
                     }
                   }
-                }
+                },
               );
             } else {
               // No API workingHours but schedule enabled -> use default 7-day template
@@ -315,7 +315,7 @@ export const AgentSettingsModal = ({
                 type: doc.file_type,
                 size: `${doc.file_size_kb} KB`,
                 uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
-              })
+              }),
             ),
             schedule: {
               enabled: apiSettings.schedule.enabled,
@@ -395,7 +395,7 @@ export const AgentSettingsModal = ({
   }, [saving, settings, agent, onSave, onClose]);
 
   const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
@@ -412,7 +412,7 @@ export const AgentSettingsModal = ({
         // Upload to API
         const uploadedDoc = (await crmAgentsService.uploadKnowledgeDocument(
           agent.id,
-          file
+          file,
         )) as KnowledgeDocumentAPI;
 
         // Transform to local format (service returns snake_case)
@@ -427,7 +427,7 @@ export const AgentSettingsModal = ({
 
       const results = await Promise.all(uploadPromises);
       const successfulUploads = results.filter(
-        (doc) => doc !== null
+        (doc) => doc !== null,
       ) as KnowledgeDocument[];
 
       if (successfulUploads.length > 0) {
@@ -465,14 +465,14 @@ export const AgentSettingsModal = ({
   const updateWorkingHours = (
     index: number,
     field: keyof WorkingHours,
-    value: string | boolean
+    value: string | boolean,
   ) => {
     setSettings((prev) => ({
       ...prev,
       schedule: {
         ...prev.schedule,
         workingHours: prev.schedule.workingHours.map((wh, i) =>
-          i === index ? { ...wh, [field]: value } : wh
+          i === index ? { ...wh, [field]: value } : wh,
         ),
       },
     }));
@@ -511,7 +511,7 @@ export const AgentSettingsModal = ({
         handoffTriggers: {
           ...prev.advanced.handoffTriggers,
           keywords: prev.advanced.handoffTriggers.keywords.filter(
-            (_, i) => i !== index
+            (_, i) => i !== index,
           ),
         },
       },
@@ -523,7 +523,7 @@ export const AgentSettingsModal = ({
       // Check if exists (case-insensitive)
       if (
         settings.ticketing.categories.some(
-          (c) => c.toLowerCase() === newCategory.trim().toLowerCase()
+          (c) => c.toLowerCase() === newCategory.trim().toLowerCase(),
         )
       ) {
         toast.error("Kategori sudah ada");
@@ -1028,7 +1028,7 @@ export const AgentSettingsModal = ({
                                   updateWorkingHours(
                                     index,
                                     "start",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                                 className="w-32"
@@ -1042,7 +1042,7 @@ export const AgentSettingsModal = ({
                                   updateWorkingHours(
                                     index,
                                     "end",
-                                    e.target.value
+                                    e.target.value,
                                   )
                                 }
                                 className="w-32"
@@ -1148,6 +1148,7 @@ export const AgentSettingsModal = ({
 
                   {/* MCP Integration */}
                   <MCPIntegration
+                    agentId={agent.id}
                     enabled={settings.integrations.mcp.enabled}
                     onToggle={(enabled) =>
                       setSettings((prev) => ({
@@ -1351,7 +1352,7 @@ export const AgentSettingsModal = ({
                                     <X className="h-3 w-3" />
                                   </button>
                                 </Badge>
-                              )
+                              ),
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">
@@ -1388,7 +1389,7 @@ export const AgentSettingsModal = ({
                                   handoffTriggers: {
                                     ...prev.advanced.handoffTriggers,
                                     sentimentThreshold: parseFloat(
-                                      e.target.value
+                                      e.target.value,
                                     ),
                                   },
                                 },
@@ -1602,7 +1603,7 @@ export const AgentSettingsModal = ({
                                     key={cat.value}
                                     value={cat.value}
                                     disabled={settings.ticketing.categories.includes(
-                                      cat.value
+                                      cat.value,
                                     )}
                                   >
                                     {cat.label}
@@ -1652,7 +1653,7 @@ export const AgentSettingsModal = ({
                                     <X className="h-3 w-3" />
                                   </button>
                                 </Badge>
-                              )
+                              ),
                             )}
                           </div>
                           <p className="text-xs text-muted-foreground">

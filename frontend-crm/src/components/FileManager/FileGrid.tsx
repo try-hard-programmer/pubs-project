@@ -156,11 +156,13 @@ export const FileGrid = ({
   } = useFiles(
     (previousSection ?? section) === "all"
       ? undefined
-      : previousSection ?? (section as any),
+      : (previousSection ?? (section as any)),
     currentFolderId,
     sortBy,
-    sortOrder
+    sortOrder,
   );
+
+  console.log("FILES", files);
 
   console.log("FileGrid render:", {
     filesCount: files?.length || 0,
@@ -181,7 +183,7 @@ export const FileGrid = ({
   // Helper hitung folder dan file dalam folder
   async function getFolderSummary(
     folderId: string,
-    folderName: string
+    folderName: string,
   ): Promise<{ filesInsideFolder: number; folderInsideFolder: number }> {
     try {
       const detail = await detailFolder({ folderId });
@@ -199,7 +201,7 @@ export const FileGrid = ({
   // Helper Delete Item
   const processDeleteItems = async (
     items: FileItem[],
-    isPermanent: boolean
+    isPermanent: boolean,
   ) => {
     try {
       const results = await Promise.allSettled(
@@ -216,7 +218,7 @@ export const FileGrid = ({
               is_folder: item.is_folder,
             });
           }
-        })
+        }),
       );
 
       const ok = results.filter((r) => r.status === "fulfilled").length;
@@ -226,7 +228,7 @@ export const FileGrid = ({
         toast.success(
           `${ok} item(s) ${
             isPermanent ? "permanently deleted" : "moved to trash"
-          } successfully`
+          } successfully`,
         );
       }
       if (fail) toast.error(`Failed to delete ${fail} item(s)`);
@@ -330,7 +332,7 @@ export const FileGrid = ({
         console.error("Semantic search error:", error);
         toast.error("Search failed: " + error.message);
         const localMatch = (files || []).filter((file) =>
-          file.name.toLowerCase().includes(searchQuery.toLowerCase())
+          file.name.toLowerCase().includes(searchQuery.toLowerCase()),
         );
         setFilteredFiles(localMatch);
       } finally {
@@ -487,7 +489,7 @@ export const FileGrid = ({
     try {
       await toggleStar({ id: file.id, is_starred: file.is_starred });
       toast.success(
-        file.is_starred ? "Removed from starred" : "Added to starred"
+        file.is_starred ? "Removed from starred" : "Added to starred",
       );
     } catch (error: any) {
       toast.error(error.message);
@@ -507,7 +509,7 @@ export const FileGrid = ({
   const handleRenameFile = async (
     file: FileItem,
     ext: string,
-    event?: React.FormEvent
+    event?: React.FormEvent,
   ) => {
     event.preventDefault();
     const trimmed = newName.trim();
@@ -517,11 +519,11 @@ export const FileGrid = ({
     }
     try {
       const isValid = /^[a-zA-Z0-9\s._-\u00C0-\u024F\u1E00-\u1EFF]+$/.test(
-        trimmed
+        trimmed,
       );
       if (!isValid) {
         toast.error(
-          "Error: Invalid file name. Allowed characters: letters, numbers, spaces, dot (.), underscore (_), and dash (-)"
+          "Error: Invalid file name. Allowed characters: letters, numbers, spaces, dot (.), underscore (_), and dash (-)",
         );
       } else {
         const response = await updateFile({ id: file.id, name: trimmed + ext });
@@ -538,17 +540,17 @@ export const FileGrid = ({
   const handleRenameFolder = async (
     folder_id: string,
     name: string,
-    event?: React.FormEvent
+    event?: React.FormEvent,
   ) => {
     event.preventDefault();
 
     try {
       const isValid = /^[a-zA-Z0-9\s._-\u00C0-\u024F\u1E00-\u1EFF]+$/.test(
-        name
+        name,
       );
       if (!isValid) {
         toast.error(
-          "Error: Invalid folder name. Allowed characters: letters, numbers, spaces, dot (.), underscore (_), and dash (-)"
+          "Error: Invalid folder name. Allowed characters: letters, numbers, spaces, dot (.), underscore (_), and dash (-)",
         );
       } else {
         await updateFolder({ folderId: folder_id, name: name });
@@ -697,7 +699,7 @@ export const FileGrid = ({
     }
 
     const alreadyInTarget = items.filter(
-      (item) => item.parent_folder_id === targetFolderId
+      (item) => item.parent_folder_id === targetFolderId,
     );
     if (alreadyInTarget.length === items.length) {
       return toast.error("Items already in target folder");
@@ -770,7 +772,7 @@ export const FileGrid = ({
           .map((r) => r!.item.id);
 
         setFilteredFiles((prev) =>
-          prev.filter((f) => !movedIds.includes(f.id))
+          prev.filter((f) => !movedIds.includes(f.id)),
         );
       }
 
@@ -784,7 +786,7 @@ export const FileGrid = ({
           `Successfully moved ${movedCount.files} file(s) and ${movedCount.folders} folder(s)`,
           {
             duration: 3000,
-          }
+          },
         );
       } else {
         const successCount = movedCount.files + movedCount.folders;
@@ -813,8 +815,8 @@ export const FileGrid = ({
     try {
       const results = await Promise.allSettled(
         items.map((item) =>
-          restoreFile({ id: item.id, is_folder: item.is_folder })
-        )
+          restoreFile({ id: item.id, is_folder: item.is_folder }),
+        ),
       );
       const ok = results.filter((r) => r.status === "fulfilled").length;
       const fail = results.filter((r) => r.status === "rejected").length;
@@ -863,7 +865,7 @@ export const FileGrid = ({
   // Utility untuk move file/folder ke folder lain
   const handleMoveFile = async (
     fileId: string,
-    targetFolderId: string | null
+    targetFolderId: string | null,
   ) => {
     const src = filteredFiles.find((f) => f.id === fileId);
     if (!src) return toast.error("File not found");
@@ -884,7 +886,7 @@ export const FileGrid = ({
   // Utility untuk filter file/folder
   const handleOnFilter = (
     sortBy: "name" | "size" | "created_at",
-    sortOrder: "asc" | "desc"
+    sortOrder: "asc" | "desc",
   ) => {
     setSortBy(sortBy);
     setSortOrder(sortOrder);
@@ -933,7 +935,7 @@ export const FileGrid = ({
 
     try {
       const results = await Promise.allSettled(
-        allShareIds.map((shareId) => deleteFileShare({ share_id: shareId }))
+        allShareIds.map((shareId) => deleteFileShare({ share_id: shareId })),
       );
 
       const ok = results.filter((r) => r.status === "fulfilled").length;
@@ -1126,8 +1128,8 @@ export const FileGrid = ({
                 {section === "shared"
                   ? "Delete Access"
                   : section === "all"
-                  ? "Move to Trash"
-                  : "Delete"}
+                    ? "Move to Trash"
+                    : "Delete"}
               </Button>
 
               <Button
@@ -1322,11 +1324,11 @@ export const FileGrid = ({
                               {(!file.is_shared ||
                                 (Array.isArray(file.shared) &&
                                   file.shared.some(
-                                    (s) => s.shared_by === user.id
+                                    (s) => s.shared_by === user.id,
                                   )) ||
                                 (Array.isArray(file.shared) &&
                                   !file.shared.some(
-                                    (s) => s.access_level === "view"
+                                    (s) => s.access_level === "view",
                                   ))) &&
                                 (previousSection ?? section) !== "trashed" && (
                                   <Button
@@ -1391,7 +1393,7 @@ export const FileGrid = ({
                               {(!file.is_shared ||
                                 (Array.isArray(file.shared) &&
                                   file.shared.some(
-                                    (s) => s.shared_by === user.id
+                                    (s) => s.shared_by === user.id,
                                   ))) &&
                                 (previousSection ?? section) !== "trashed" && (
                                   <DropdownMenuSub>
@@ -1429,7 +1431,7 @@ export const FileGrid = ({
                                                 return;
                                               handleMoveFile(
                                                 file.id,
-                                                folder.id
+                                                folder.id,
                                               );
                                             }}
                                           >
@@ -1443,7 +1445,7 @@ export const FileGrid = ({
                               {(!file.is_shared ||
                                 (Array.isArray(file.shared) &&
                                   file.shared.some(
-                                    (s) => s.shared_by === user.id
+                                    (s) => s.shared_by === user.id,
                                   )) ||
                                 Array.isArray(file.shared)) &&
                                 (previousSection ?? section) !== "trashed" && (
@@ -1460,13 +1462,13 @@ export const FileGrid = ({
                               {(!file.is_shared ||
                                 !Array.isArray(file.shared) ||
                                 file.shared.some(
-                                  (s) => s.shared_by === user.id
+                                  (s) => s.shared_by === user.id,
                                 ) ||
                                 file.shared.some(
-                                  (s) => s.access_level === "share"
+                                  (s) => s.access_level === "share",
                                 ) ||
                                 file.shared.some(
-                                  (s) => s.access_level === "manage"
+                                  (s) => s.access_level === "manage",
                                 )) &&
                                 (previousSection ?? section) !== "trashed" && (
                                   <DropdownMenuItem
@@ -1484,7 +1486,7 @@ export const FileGrid = ({
                           {(!file.is_shared ||
                             (Array.isArray(file.shared) &&
                               file.shared.some(
-                                (s) => s.shared_by === user.id
+                                (s) => s.shared_by === user.id,
                               ))) &&
                             (previousSection ?? section) !== "trashed" && (
                               <DropdownMenuItem
@@ -1540,13 +1542,13 @@ export const FileGrid = ({
                             (!file.is_shared ||
                               !Array.isArray(file.shared) ||
                               file.shared.some(
-                                (s) => s.shared_by === user.id
+                                (s) => s.shared_by === user.id,
                               ) ||
                               file.shared.some(
-                                (s) => s.access_level === "delete"
+                                (s) => s.access_level === "delete",
                               ) ||
                               file.shared.some(
-                                (s) => s.access_level === "manage"
+                                (s) => s.access_level === "manage",
                               )) && (
                               <DropdownMenuItem
                                 onClick={(e) => {
@@ -1732,7 +1734,7 @@ export const FileGrid = ({
                                 {(!file.is_shared ||
                                   (Array.isArray(file.shared) &&
                                     file.shared.some(
-                                      (s) => s.shared_by === user.id
+                                      (s) => s.shared_by === user.id,
                                     ))) &&
                                   (previousSection ?? section) !==
                                     "trashed" && (
@@ -1788,7 +1790,7 @@ export const FileGrid = ({
                                                     return;
                                                   handleMoveFile(
                                                     file.id,
-                                                    folder.id
+                                                    folder.id,
                                                   );
                                                 }}
                                               >
@@ -1804,7 +1806,7 @@ export const FileGrid = ({
                                 {(!file.is_shared ||
                                   (Array.isArray(file.shared) &&
                                     file.shared.some(
-                                      (s) => s.shared_by === user.id
+                                      (s) => s.shared_by === user.id,
                                     )) ||
                                   Array.isArray(file.shared)) &&
                                   (previousSection ?? section) !==
@@ -1822,13 +1824,13 @@ export const FileGrid = ({
                                 {(!file.is_shared ||
                                   !Array.isArray(file.shared) ||
                                   file.shared.some(
-                                    (s) => s.shared_by === user.id
+                                    (s) => s.shared_by === user.id,
                                   ) ||
                                   file.shared.some(
-                                    (s) => s.access_level === "share"
+                                    (s) => s.access_level === "share",
                                   ) ||
                                   file.shared.some(
-                                    (s) => s.access_level === "manage"
+                                    (s) => s.access_level === "manage",
                                   )) &&
                                   (previousSection ?? section) !==
                                     "trashed" && (
@@ -1847,7 +1849,7 @@ export const FileGrid = ({
                             {(!file.is_shared ||
                               (Array.isArray(file.shared) &&
                                 file.shared.some(
-                                  (s) => s.shared_by === user.id
+                                  (s) => s.shared_by === user.id,
                                 ))) &&
                               (previousSection ?? section) !== "trashed" && (
                                 <DropdownMenuItem
@@ -1904,13 +1906,13 @@ export const FileGrid = ({
                               (!file.is_shared ||
                                 !Array.isArray(file.shared) ||
                                 file.shared.some(
-                                  (s) => s.shared_by === user.id
+                                  (s) => s.shared_by === user.id,
                                 ) ||
                                 file.shared.some(
-                                  (s) => s.access_level === "delete"
+                                  (s) => s.access_level === "delete",
                                 ) ||
                                 file.shared.some(
-                                  (s) => s.access_level === "manage"
+                                  (s) => s.access_level === "manage",
                                 )) && (
                                 <DropdownMenuItem
                                   onClick={(e) => {
@@ -1986,7 +1988,7 @@ export const FileGrid = ({
                             file.shared.some((s) => s.shared_by === user.id)) ||
                           (Array.isArray(file.shared) &&
                             !file.shared.some(
-                              (s) => s.access_level === "view"
+                              (s) => s.access_level === "view",
                             ))) &&
                           (previousSection ?? section) !== "trashed" && (
                             <Button
@@ -2019,7 +2021,12 @@ export const FileGrid = ({
                         className="text-[10px] py-0 px-1"
                       >
                         <Users className="w-2.5 h-2.5 mr-0.5" />
-                        Shared
+                        {previousSection || section !== "shared"
+                          ? "shared"
+                          : file.shared[0].shared_with_email.replace(
+                              "@gmail.com",
+                              "",
+                            )}
                       </Badge>
                     </div>
                   )}
