@@ -80,6 +80,11 @@ interface CustomerServiceSidebarProps {
   filters: ChatFilters;
   onFiltersChange: (filters: ChatFilters) => void;
   isLoading?: boolean;
+
+  // NEW PROPS
+  onLoadMore?: () => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
 }
 
 // ============================================================================
@@ -94,6 +99,9 @@ export const CustomerServiceSidebar = ({
   filters,
   onFiltersChange,
   isLoading = false,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
 }: CustomerServiceSidebarProps) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
@@ -103,8 +111,8 @@ export const CustomerServiceSidebar = ({
     new Set(
       chats
         .filter((c) => c.assignedTo && c.assignedTo !== "-")
-        .map((c) => c.assignedTo)
-    )
+        .map((c) => c.assignedTo),
+    ),
   );
 
   const channels = ["whatsapp", "telegram", "email"];
@@ -144,7 +152,7 @@ export const CustomerServiceSidebar = ({
   });
 
   const activeFiltersCount = Object.values(filters).filter(
-    (v) => v !== "all" && v !== undefined
+    (v) => v !== "all" && v !== undefined,
   ).length;
 
   const getStatusColor = (status: string): string => {
@@ -213,7 +221,7 @@ export const CustomerServiceSidebar = ({
               className={cn(
                 "w-full justify-between h-9 text-xs",
                 activeFiltersCount > 0 &&
-                  "border-primary/50 bg-primary/5 text-primary"
+                  "border-primary/50 bg-primary/5 text-primary",
               )}
             >
               <div className="flex items-center gap-2">
@@ -251,7 +259,7 @@ export const CustomerServiceSidebar = ({
                       variant={"outline"}
                       className={cn(
                         "w-full justify-start text-left font-normal",
-                        !filters.dateRange && "text-muted-foreground"
+                        !filters.dateRange && "text-muted-foreground",
                       )}
                     >
                       <CalendarIcon className="mr-2 h-4 w-4" />
@@ -474,7 +482,7 @@ export const CustomerServiceSidebar = ({
                     ? "bg-muted border-l-4 border-l-primary pl-2"
                     : "border-l-4 border-l-transparent",
                   chat.status === "resolved" &&
-                    "opacity-70 bg-gray-50/50 dark:bg-gray-900/10"
+                    "opacity-70 bg-gray-50/50 dark:bg-gray-900/10",
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -489,7 +497,7 @@ export const CustomerServiceSidebar = ({
                     <div
                       className={cn(
                         "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
-                        getStatusColor(chat.status)
+                        getStatusColor(chat.status),
                       )}
                     />
                   </div>
@@ -569,6 +577,28 @@ export const CustomerServiceSidebar = ({
                     Clear Filters
                   </Button>
                 )}
+              </div>
+            )}
+
+            {/* NEW: Load More Button */}
+            {hasMore && !searchQuery && (
+              <div className="p-4 flex justify-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                  className="w-full text-xs text-muted-foreground"
+                >
+                  {isLoadingMore ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-2 animate-spin" />
+                      Loading more...
+                    </>
+                  ) : (
+                    "Load more conversations"
+                  )}
+                </Button>
               </div>
             )}
           </div>

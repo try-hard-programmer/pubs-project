@@ -6,6 +6,7 @@ import {
   DialogTitle,
   DialogFooter,
   DialogDescription,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -159,8 +160,10 @@ export const AIChatModal = ({
   const [deletingTopicId, setDeletingTopicId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deletingTitle, setDeletingTitle] = useState<string | undefined>(
-    undefined
+    undefined,
   );
+
+  const { files, error } = useFiles("all", null, "name", "asc");
 
   // State untuk toggle expanded per message
   const toggleRefsView = (messageId: string) => {
@@ -223,7 +226,7 @@ export const AIChatModal = ({
       // Check this BEFORE any other conditions!
       if (isCreatingTopicRef.current) {
         console.log(
-          "[Load Messages] Topic creation in progress, skipping to preserve messages"
+          "[Load Messages] Topic creation in progress, skipping to preserve messages",
         );
         return;
       }
@@ -245,7 +248,7 @@ export const AIChatModal = ({
       // This prevents clearing messages when transitioning from temporary to real topic
       if (!currentTopicId && activeTopicIdRef.current) {
         console.log(
-          "[Load Messages] Topic being created, skipping to prevent clearing messages"
+          "[Load Messages] Topic being created, skipping to prevent clearing messages",
         );
         return;
       }
@@ -258,18 +261,17 @@ export const AIChatModal = ({
 
       console.log(
         "[Load Messages] Loading messages for topic:",
-        currentTopicId
+        currentTopicId,
       );
 
       try {
         setIsLoadingMessages(true);
-        const fetchedMessages = await ChatHistoryService.getMessages(
-          currentTopicId
-        );
+        const fetchedMessages =
+          await ChatHistoryService.getMessages(currentTopicId);
 
         console.log(
           "[Load Messages] Fetched messages:",
-          fetchedMessages.length
+          fetchedMessages.length,
         );
 
         // Convert API messages to UI messages
@@ -281,7 +283,7 @@ export const AIChatModal = ({
           console.log("[Load Messages] Processing message:", msg.id);
           console.log(
             "[Load Messages] reference_documents:",
-            referenceDocuments
+            referenceDocuments,
           );
 
           return {
@@ -352,13 +354,18 @@ export const AIChatModal = ({
   // Initialize temporary session when modal opens
   useEffect(() => {
     if (open && !isLoadingTopics) {
+      // Jangan reset kalau sudah ada pesan (optimistic UI)
+      if (messages.length > 0) return;
+
+      // Jangan reset saat sedang create topic / sending
+      if (isCreatingTopicRef.current || isLoading) return;
       // If no topic selected, start temporary session
       if (!currentTopicId && !isTemporarySession) {
         console.log(
-          "[Modal Open] No topic selected, starting temporary session"
+          "[Modal Open] No topic selected, starting temporary session",
         );
         setIsTemporarySession(true);
-        setMessages([]);
+        // setMessages([]);
       }
     }
 
@@ -371,6 +378,7 @@ export const AIChatModal = ({
       setIsTemporarySession(false);
       activeTopicIdRef.current = null; // Clear ref on close
       setActiveTopicForHighlight(null); // Clear highlight on close
+      setMessages([]);
     }
   }, [open, currentTopicId, isTemporarySession, isLoadingTopics]);
 
@@ -378,7 +386,7 @@ export const AIChatModal = ({
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector(
-        "[data-radix-scroll-area-viewport]"
+        "[data-radix-scroll-area-viewport]",
       );
       if (scrollElement) {
         scrollElement.scrollTop = scrollElement.scrollHeight;
@@ -438,7 +446,7 @@ export const AIChatModal = ({
       const shouldCreateTopic = isTemporarySession && !topicId;
 
       if (shouldCreateTopic) {
-        setConversationLoading(true);
+        // setConversationLoading(true);
         console.log("[First Message] Creating topic with title from query");
         try {
           // Set flag to prevent useEffect from clearing messages
@@ -483,14 +491,14 @@ export const AIChatModal = ({
       const data = await ChatHistoryService.askAgent(
         userQuery,
         topicId,
-        true // save_history = true
+        true, // save_history = true
       );
 
-      setConversationLoading(false);
+      // setConversationLoading(false);
       // Validasi minimal
       const answer = data?.answer ?? "Tidak ada jawaban dari server.";
       const referenceDocuments: ReferenceDocument[] = Array.isArray(
-        data?.reference_documents
+        data?.reference_documents,
       )
         ? data.reference_documents
         : [];
@@ -506,18 +514,21 @@ export const AIChatModal = ({
 
       console.log(
         "[Agent Response] assistant message created:",
-        assistantMessage
+        assistantMessage,
       );
 
       // Add assistant message directly to UI with reference documents from agent response
       // This is more reliable than refetching from API which might have race condition
       console.log(
-        "[Agent Response] Adding assistant message to UI with references"
+        "[Agent Response] Adding assistant message to UI with references",
       );
       setMessages((prev) => [...prev, assistantMessage]);
 
+      console.log("MESSAGE KEDUA ", messages);
+
       // Only update UI state if this was the first message (topic just created)
       if (shouldCreateTopic && activeTopicIdRef.current) {
+        setSkipNextLoad(true);
         console.log("[First Message] Topic created, updating UI state");
         setActiveTopicForHighlight(activeTopicIdRef.current);
         // Update currentTopicId to sync with the newly created topic
@@ -583,9 +594,14 @@ export const AIChatModal = ({
       });
     }
   };
-  const handlePreview = async (file: FileItem, e: React.MouseEvent) => {
+  const handlePreview = async (file_id: string, e: React.MouseEvent) => {
+    console.log("FILES ", files);
     e.stopPropagation();
-    setPreviewFile(file);
+    files.forEach((f) => {
+      if (f.id === file_id) {
+        setPreviewFile(f);
+      }
+    });
   };
 
   const handleConfirmDeleteChat = async () => {
@@ -605,8 +621,9 @@ export const AIChatModal = ({
         className={`${
           isFullscreen ? "max-w-full h-screen" : "max-w-6xl h-[80vh]"
         } flex flex-col p-0 bg-background border-border`}
+        showCloseButton={false}
       >
-        <DialogHeader className="p-4 pr-14 border-b border-border">
+        <DialogHeader className="relative p-4 pr-14 border-b border-border">
           <div className="flex items-center justify-between w-full gap-4">
             <div className="flex items-center gap-4">
               <DialogTitle className="flex items-center gap-2 text-foreground">
@@ -677,7 +694,8 @@ export const AIChatModal = ({
               </Select>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Right actions (sejajar) */}
+            <div className="absolute right-4 top-4 flex items-center gap-2">
               <Button
                 variant="ghost"
                 size="sm"
@@ -691,6 +709,11 @@ export const AIChatModal = ({
                   <Maximize className="w-4 h-4" />
                 )}
               </Button>
+
+              <DialogClose className="h-8 w-8 inline-flex items-center justify-center rounded-sm opacity-70 hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </DialogClose>
             </div>
           </div>
         </DialogHeader>
@@ -738,7 +761,7 @@ export const AIChatModal = ({
                       onClick={() => {
                         console.log(
                           "[Topic Click] Switching to topic:",
-                          topic.id
+                          topic.id,
                         );
                         setCurrentTopicId(topic.id);
                         activeTopicIdRef.current = topic.id; // Sync ref with state
@@ -872,7 +895,7 @@ export const AIChatModal = ({
                             </div>
                           </Card>
 
-                          {/* Label Sumber dengan styling yang lebih rapi */}
+                          {/* Label Sumber */}
                           {message.role === "assistant" &&
                             Array.isArray(message.reference_documents) &&
                             message.reference_documents.length > 0 && (
@@ -899,7 +922,11 @@ export const AIChatModal = ({
                                             key={idx}
                                             className="inline-flex items-center"
                                           >
-                                            <div
+                                            <button
+                                              type="button"
+                                              onClick={(e) =>
+                                                handlePreview(ref.file_id, e)
+                                              }
                                               className="group relative inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:border-primary/50 cursor-pointer"
                                               style={{ width: "12rem" }}
                                             >
@@ -912,14 +939,14 @@ export const AIChatModal = ({
                                               >
                                                 {ref.filename}
                                               </span>
-                                            </div>
+                                            </button>
                                           </div>
                                         );
                                       })}
 
                                       {shouldShowMore(
                                         items.length,
-                                        isExpanded
+                                        isExpanded,
                                       ) && (
                                         <Button
                                           variant="outline"

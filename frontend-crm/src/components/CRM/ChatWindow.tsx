@@ -129,9 +129,12 @@ interface ChatWindowProps {
     ticket: Omit<
       Ticket,
       "id" | "ticketNumber" | "createdAt" | "updatedAt" | "relatedMessages"
-    >
+    >,
   ) => void;
   onUpdateTicket?: (ticketId: string, updates: Partial<Ticket>) => void;
+  // NEW PROPS
+  onLoadMoreMessages?: () => void;
+  hasMoreMessages?: boolean;
 }
 
 /**
@@ -162,6 +165,8 @@ export const ChatWindow = ({
   onMarkResolved,
   onCreateTicket,
   onUpdateTicket,
+  onLoadMoreMessages,
+  hasMoreMessages = false,
 }: ChatWindowProps) => {
   // ==========================================================================
   // STATE & REFS
@@ -178,15 +183,25 @@ export const ChatWindow = ({
   // Ref for the hidden file input
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastMessageIdRef = useRef<string | null>(null);
 
   // ==========================================================================
-  // AUTO-SCROLL EFFECT
+  // SMART AUTO-SCROLL EFFECT
   // ==========================================================================
 
   useEffect(() => {
-    if (messagesEndRef.current && !isLoading) {
+    if (!messagesEndRef.current) return;
+
+    const lastMessage = messages[messages.length - 1];
+    const lastMessageId = lastMessage?.id;
+
+    // SCENARIO 1: New Message Arrived (Standard Chat Behavior)
+    if (lastMessageId !== lastMessageIdRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+      lastMessageIdRef.current = lastMessageId || null;
     }
+
+    // SCENARIO 2: History Loaded
   }, [messages, isLoading]);
 
   // ==========================================================================
@@ -398,7 +413,7 @@ export const ChatWindow = ({
                         variant="outline"
                         className="text-xs flex items-center gap-1 text-muted-foreground"
                         title={`Previously handled by ${aiAgentName}. Escalated at ${new Date(
-                          escalatedAt
+                          escalatedAt,
                         ).toLocaleString()}`}
                       >
                         <Bot className="w-3 h-3" />
@@ -482,6 +497,29 @@ export const ChatWindow = ({
         {/* Message List */}
         <ScrollArea className="flex-1 p-6">
           <div className="space-y-4 max-w-4xl mx-auto">
+            {hasMoreMessages && !isLoading && messages.length < 100 && (
+              <div className="flex justify-center pb-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onLoadMoreMessages}
+                  className="text-xs text-muted-foreground h-8 rounded-full bg-muted/30 hover:bg-muted"
+                >
+                  <ArrowUp className="w-3 h-3 mr-2" />
+                  Load previous messages
+                </Button>
+              </div>
+            )}
+
+            {/* Optional: Indicator when limit reached */}
+            {messages.length >= 100 && (
+              <div className="flex justify-center pb-4">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                  History Limit Reached
+                </span>
+              </div>
+            )}
+
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center space-y-3">
@@ -528,8 +566,8 @@ export const ChatWindow = ({
                             isCustomer
                               ? "bg-primary/10 text-primary"
                               : isAI
-                              ? "bg-blue-500/10 text-blue-500"
-                              : "bg-green-500/10 text-green-500"
+                                ? "bg-blue-500/10 text-blue-500"
+                                : "bg-green-500/10 text-green-500"
                           }
                         >
                           {isCustomer ? (
@@ -565,8 +603,8 @@ export const ChatWindow = ({
                             isCustomer
                               ? "bg-muted"
                               : isAI
-                              ? "bg-blue-500/10 border border-blue-500/20"
-                              : "bg-primary text-primary-foreground"
+                                ? "bg-blue-500/10 border border-blue-500/20"
+                                : "bg-primary text-primary-foreground"
                           }`}
                         >
                           {/* CHANGE: Use the variable 'attachment' instead of 'message.attachment' */}

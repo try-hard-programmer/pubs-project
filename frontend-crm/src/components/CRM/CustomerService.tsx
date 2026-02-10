@@ -202,6 +202,11 @@ export const CustomerService = ({
   const { wsStatus, reconnectAttempts, subscribeToMessages, resetUnreadCount } =
     useWebSocket();
 
+  // NEW: Pagination State
+  const [hasMoreChats, setHasMoreChats] = useState(true);
+  const [isLoadingMoreChats, setIsLoadingMoreChats] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+
   // UI State
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [filters, setFilters] = useState<ChatFilters>({
@@ -251,7 +256,7 @@ export const CustomerService = ({
 
   const [chatsLoading, setChatsLoading] = useState(true);
   const [customersMap, setCustomersMap] = useState<Map<string, Customer>>(
-    new Map()
+    new Map(),
   );
   const [currentChatMessages, setCurrentChatMessages] = useState<Message[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -275,7 +280,7 @@ export const CustomerService = ({
           agentName = apiTicket.assigned_agent.name;
         } else if (apiTicket.assigned_agent_id) {
           const foundAgent = agentsRef.current.find(
-            (a) => a.id === apiTicket.assigned_agent_id
+            (a) => a.id === apiTicket.assigned_agent_id,
           );
           agentName = foundAgent?.name;
         }
@@ -314,7 +319,7 @@ export const CustomerService = ({
               };
             }
             return chat;
-          })
+          }),
         );
 
         toast.info(`New ticket created: ${newTicket.ticketNumber}`);
@@ -322,7 +327,7 @@ export const CustomerService = ({
         console.error("Error fetching automatically created ticket:", error);
       }
     },
-    []
+    [],
   );
 
   // =============================  =============================================
@@ -330,12 +335,19 @@ export const CustomerService = ({
   // ==========================================================================
 
   /**
-   * Effect: Fetch chats when filter type or filters change
+   * Refactored: Fetch chats with pagination support
    */
-  useEffect(() => {
-    const fetchChats = async () => {
+  const loadChats = useCallback(
+    async (isLoadMore = false) => {
       try {
-        setChatsLoading(true);
+        if (isLoadMore) {
+          setIsLoadingMoreChats(true);
+        } else {
+          setChatsLoading(true);
+        }
+
+        const limit = 50;
+        const skip = isLoadMore ? chatsRef.current.length : 0;
 
         // NEW: Extract dates
         const createdAfter = filters.dateRange?.from
@@ -351,26 +363,25 @@ export const CustomerService = ({
           status_filter: filters.status !== "all" ? filters.status : undefined,
           channel:
             filters.channel !== "all" ? (filters.channel as any) : undefined,
-          // NEW: Pass to API
           created_after: createdAfter,
           created_before: createdBefore,
+          skip: skip,
+          limit: limit,
         });
 
         const transformedChats: Chat[] = await Promise.all(
           apiChats?.chats?.map(async (apiChat) => {
+            // ... existing mapping logic (copy from your original code) ...
+            // Mapping logic skipped for brevity as requested
             let assignedAgent: Agent | undefined;
-
             return {
               id: apiChat.id,
-              customerId: apiChat.customer_id, // Map customer_id
+              customerId: apiChat.customer_id,
               customerName: apiChat.customer_name || "Unknown Customer",
               lastMessage: apiChat.last_message?.content || "",
               timestamp: new Date(apiChat.last_message_at).toLocaleTimeString(
                 [],
-                {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }
+                { hour: "2-digit", minute: "2-digit" },
               ),
               unreadCount: apiChat.unread_count || 0,
               isAssigned: apiChat.handled_by === "human",
@@ -387,11 +398,7 @@ export const CustomerService = ({
               escalatedAt: apiChat.escalated_at || undefined,
               escalationReason: apiChat.escalation_reason || undefined,
               channel: apiChat.channel || "-",
-              status: apiChat.status as
-                | "open"
-                | "pending"
-                | "assigned"
-                | "resolved",
+              status: apiChat.status as any,
               messages: [],
               labels: [],
               createdDate: new Date(apiChat.created_at).toLocaleDateString(),
@@ -400,22 +407,92 @@ export const CustomerService = ({
                 : undefined,
               tickets: [],
             };
-          })
+          }),
         );
 
-        setChats(transformedChats);
+        if (isLoadMore) {
+          setChats((prev) => [...prev, ...transformedChats]);
+        } else {
+          setChats(transformedChats);
+        }
+
+        // Update pagination flag
+        setHasMoreChats(transformedChats.length === limit);
       } catch (error) {
         console.error("Error fetching chats:", error);
-        if (error && typeof error === "object" && "response" in error) {
-          toast.error("Gagal memuat data chats");
-        }
+        toast.error("Gagal memuat data chats");
       } finally {
         setChatsLoading(false);
+        setIsLoadingMoreChats(false);
       }
-    };
+    },
+    [filterType, filters],
+  );
 
-    fetchChats();
-  }, [filterType, filters]);
+  // Initial load when filters change
+  useEffect(() => {
+    loadChats(false);
+  }, [loadChats]);
+
+  /**
+   * Helper to process messages (cleaning, transforming)
+   * Moved out to be reusable for 'fetchChatDetails' and 'handleLoadMoreMessages'
+   */
+  const processMessages = useCallback((messages: any[]): Message[] => {
+    return messages.map((apiMsg) => {
+      // 1. Determine Sender Role
+      let senderRole: "customer" | "agent" | "ai" = "customer";
+      const type = String(apiMsg.sender_type || "").toLowerCase();
+
+      if (type === "agent" || type === "human" || type === "admin") {
+        senderRole = "agent";
+      } else if (type === "ai" || type === "bot" || type === "system") {
+        senderRole = "ai";
+      }
+
+      // 2. Handle Attachment Logic
+      let fileType = "application/octet-stream";
+      if (apiMsg.metadata) {
+        fileType =
+          apiMsg.metadata.media_type || apiMsg.metadata.message_type || "file";
+      }
+
+      const attachment = apiMsg.metadata?.media_url
+        ? {
+            name: apiMsg.metadata.filename || "Attachment",
+            url: apiMsg.metadata.media_url,
+            type: fileType,
+          }
+        : undefined;
+
+      // 3. Clean Content Logic
+      let contentToDisplay = apiMsg.content || "";
+      if (attachment && contentToDisplay === attachment.url) {
+        contentToDisplay = "";
+      }
+      if (
+        contentToDisplay.startsWith("data:image") ||
+        contentToDisplay.startsWith("/9j/") ||
+        (contentToDisplay.length > 500 && !contentToDisplay.includes(" "))
+      ) {
+        contentToDisplay = "";
+      }
+
+      return {
+        id: apiMsg.id,
+        sender: senderRole,
+        senderName: apiMsg.sender_name || "Unknown",
+        content: contentToDisplay,
+        timestamp: new Date(apiMsg.created_at).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        ticketId: apiMsg.ticket_id || undefined,
+        attachment: attachment,
+        metadata: apiMsg.metadata,
+      };
+    });
+  }, []);
 
   /**
    * Effect: Fetch ALL tickets SMARTLY when switching to 'ticketing' view
@@ -433,7 +510,7 @@ export const CustomerService = ({
 
         const now = new Date();
         const thirtyDaysAgo = new Date(
-          now.getTime() - 30 * 24 * 60 * 60 * 1000
+          now.getTime() - 30 * 24 * 60 * 60 * 1000,
         ).toISOString();
 
         // PARALLEL FETCHING
@@ -493,7 +570,7 @@ export const CustomerService = ({
             agentName = apiTicket.assigned_agent.name;
           } else if (apiTicket.assigned_agent_id) {
             const foundAgent = agents.find(
-              (a) => a.id === apiTicket.assigned_agent_id
+              (a) => a.id === apiTicket.assigned_agent_id,
             );
             agentName = foundAgent?.name;
           }
@@ -550,88 +627,23 @@ export const CustomerService = ({
       try {
         setMessagesLoading(true);
 
-        // 1. Fetch Messages
+        // 1. Fetch Messages (Page 0, Descending)
         const messagesResponse = await crmChatsService.getChatMessages(
-          activeChat
+          activeChat,
+          {
+            skip: 0,
+            limit: 20,
+            sort_order: "desc",
+          },
         );
 
-        // Transform messages
-        // ... inside fetchChatDetails ...
-        const transformedMessages: Message[] = messagesResponse.messages.map(
-          (apiMsg) => {
-            // 1. Determine Sender Role
-            let senderRole: "customer" | "agent" | "ai" = "customer";
-            const type = String(apiMsg.sender_type || "").toLowerCase();
-
-            if (type === "agent" || type === "human" || type === "admin") {
-              senderRole = "agent";
-            } else if (type === "ai" || type === "bot" || type === "system") {
-              senderRole = "ai";
-            } else {
-              senderRole = "customer";
-            }
-
-            // 2. Handle Attachment Logic
-            let fileType = "application/octet-stream";
-            if (apiMsg.metadata) {
-              fileType =
-                apiMsg.metadata.media_type ||
-                apiMsg.metadata.message_type ||
-                "file";
-            }
-
-            const attachment = apiMsg.metadata?.media_url
-              ? {
-                  name: apiMsg.metadata.filename || "Attachment",
-                  url: apiMsg.metadata.media_url,
-                  type: fileType,
-                }
-              : undefined;
-
-            // 3. CLEAN CONTENT LOGIC (THE FIX)
-            let contentToDisplay = apiMsg.content || "";
-
-            // Rule A: If content is exactly the URL, hide it
-            if (attachment && contentToDisplay === attachment.url) {
-              contentToDisplay = "";
-            }
-
-            // Rule B: AGGRESSIVE Base64/Raw Data Cleaning
-            // This prevents the /9j/... string from showing
-            if (
-              contentToDisplay.startsWith("data:image") ||
-              contentToDisplay.startsWith("data:application") ||
-              contentToDisplay.startsWith("/9j/") || // JPEG Base64 Header
-              contentToDisplay.startsWith("iVBOR") || // PNG Base64 Header
-              contentToDisplay.startsWith("R0lGOD") || // GIF Base64 Header
-              contentToDisplay.startsWith("JVBER") || // PDF Base64 Header
-              (contentToDisplay.length > 500 && !contentToDisplay.includes(" ")) // Catch-all for long strings without spaces
-            ) {
-              console.warn(
-                "⚠️ Hiding raw Base64 content for message:",
-                apiMsg.id
-              );
-              contentToDisplay = "";
-            }
-
-            // 4. Return Final Message Object
-            return {
-              id: apiMsg.id,
-              sender: senderRole,
-              senderName: apiMsg.sender_name || "Unknown",
-              content: contentToDisplay, // <--- Using the cleaned content
-              timestamp: new Date(apiMsg.created_at).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              ticketId: apiMsg.ticket_id || undefined,
-              attachment: attachment,
-              metadata: apiMsg.metadata,
-            };
-          }
-        );
+        // Transform and Reverse
+        const transformedMessages = processMessages(
+          messagesResponse.messages,
+        ).reverse();
 
         setCurrentChatMessages(transformedMessages);
+        setHasMoreMessages(messagesResponse.messages.length === 20);
 
         // 2. Fetch Tickets for this specific chat
         const ticketsResponse = (await crmChatsService.getTickets({
@@ -650,7 +662,7 @@ export const CustomerService = ({
               agentName = apiTicket.assigned_agent.name;
             } else if (apiTicket.assigned_agent_id) {
               const foundAgent = agents.find(
-                (a) => a.id === apiTicket.assigned_agent_id
+                (a) => a.id === apiTicket.assigned_agent_id,
               );
               agentName = foundAgent?.name;
             }
@@ -683,7 +695,7 @@ export const CustomerService = ({
               tags: apiTicket.tags,
               relatedMessages: [],
             };
-          }
+          },
         );
 
         // 3. Update State
@@ -695,8 +707,8 @@ export const CustomerService = ({
                   messages: transformedMessages,
                   tickets: transformedTickets,
                 }
-              : chat
-          )
+              : chat,
+          ),
         );
       } catch (error) {
         console.error("Error fetching chat details:", error);
@@ -707,8 +719,43 @@ export const CustomerService = ({
     };
 
     fetchChatDetails();
-    // Removed 'agents' from dependency to prevent double fetch loop on page load
-  }, [activeChat]);
+  }, [activeChat, processMessages, agents]);
+
+  /**
+   * NEW: Load More Messages (Pagination Upwards)
+   */
+  const handleLoadMoreMessages = async () => {
+    if (!activeChat || !hasMoreMessages) return;
+
+    try {
+      const currentCount = currentChatMessages.length;
+
+      const response = await crmChatsService.getChatMessages(activeChat, {
+        skip: currentCount,
+        limit: 20,
+        sort_order: "desc", // Get next batch of "newest" (which are older than current)
+      });
+
+      if (response.messages.length === 0) {
+        setHasMoreMessages(false);
+        return;
+      }
+
+      // Process and Reverse (to match chronological UI)
+      const olderMessages = processMessages(response.messages).reverse();
+
+      // Prepend older messages
+      setCurrentChatMessages((prev) => [...olderMessages, ...prev]);
+
+      // Update hasMore flag
+      if (response.messages.length < 20) {
+        setHasMoreMessages(false);
+      }
+    } catch (error) {
+      console.error("Error loading older messages:", error);
+      toast.error("Gagal memuat pesan lama");
+    }
+  };
 
   const fetchAndPrependChat = useCallback(
     async (chatId: string, initialContent?: string, customerName?: string) => {
@@ -769,7 +816,7 @@ export const CustomerService = ({
         pendingChatCreations.current.delete(chatId);
       }
     },
-    []
+    [],
   );
 
   // Fetch agents on component mount
@@ -832,7 +879,7 @@ export const CustomerService = ({
         (finalContent.length > 500 && !finalContent.includes(" ")) // Heuristic: Long string with no spaces is likely raw data
       ) {
         console.warn(
-          "🧹 Filtered out raw Base64/File content from WebSocket payload"
+          "🧹 Filtered out raw Base64/File content from WebSocket payload",
         );
         finalContent = "";
       }
@@ -847,12 +894,12 @@ export const CustomerService = ({
 
       if (!finalContent && hasMedia) {
         console.log(
-          "🕵️‍♂️ Media message has no text. Querying API for potential missing caption..."
+          "🕵️‍♂️ Media message has no text. Querying API for potential missing caption...",
         );
         try {
           const response = await crmChatsService.getChatMessages(chat_id);
           const correctMessage = response.messages.find(
-            (m: any) => m.id === message_id
+            (m: any) => m.id === message_id,
           );
 
           if (correctMessage && correctMessage.content) {
@@ -966,7 +1013,7 @@ export const CustomerService = ({
         playNotificationSound("message", 0.5);
       }
     },
-    [fetchAndAddTicket, fetchAndPrependChat]
+    [fetchAndAddTicket, fetchAndPrependChat],
   );
 
   const handleChatUpdateNotification = useCallback(
@@ -980,7 +1027,7 @@ export const CustomerService = ({
       if (update_type === "ticket_created" && data.ticket_id) {
         console.log(
           "🎫 WebSocket triggered ticket creation:",
-          data.ticket_number
+          data.ticket_number,
         );
         // This helper (which we added previously) fetches the full ticket
         // and adds it to the chat's ticket list instantly.
@@ -988,7 +1035,7 @@ export const CustomerService = ({
 
         // Optional: Show a toast so the agent notices
         toast.info(
-          `New Ticket Auto-Created: ${data.ticket_number || "Ticket"}`
+          `New Ticket Auto-Created: ${data.ticket_number || "Ticket"}`,
         );
       }
       // =========================================
@@ -1011,7 +1058,7 @@ export const CustomerService = ({
             updatedChat.escalatedAt = new Date().toISOString();
             updatedChat.escalationReason = data.reason;
             toast.info(
-              `Chat escalated: ${data.reason || "No reason provided"}`
+              `Chat escalated: ${data.reason || "No reason provided"}`,
             );
           }
 
@@ -1023,7 +1070,7 @@ export const CustomerService = ({
           }
 
           return updatedChat;
-        })
+        }),
       );
 
       if (chat_id === activeChatRef.current) {
@@ -1032,7 +1079,7 @@ export const CustomerService = ({
         }
       }
     },
-    [fetchAndAddTicket] // Ensure this dependency is present!
+    [fetchAndAddTicket], // Ensure this dependency is present!
   );
 
   const handleWebSocketMessage = useCallback(
@@ -1041,7 +1088,7 @@ export const CustomerService = ({
         case "connection_established":
           console.log(
             "✅ WebSocket connection established:",
-            notification.message
+            notification.message,
           );
           break;
         case "new_message":
@@ -1054,7 +1101,7 @@ export const CustomerService = ({
           console.log("📩 Unknown notification type:", notification);
       }
     },
-    [handleNewMessageNotification, handleChatUpdateNotification]
+    [handleNewMessageNotification, handleChatUpdateNotification],
   );
 
   useEffect(() => {
@@ -1082,8 +1129,8 @@ export const CustomerService = ({
     if (activeChat) {
       setChats((prevChats) =>
         prevChats.map((chat) =>
-          chat.id === activeChat ? { ...chat, unreadCount: 0 } : chat
-        )
+          chat.id === activeChat ? { ...chat, unreadCount: 0 } : chat,
+        ),
       );
       resetUnreadCount();
     }
@@ -1108,7 +1155,7 @@ export const CustomerService = ({
 
       if (selectedChat.humanId && selectedChat.humanId !== user.id) {
         toast.error(
-          "Hanya agent yang ditugaskan yang dapat mengirim pesan ke chat ini"
+          "Hanya agent yang ditugaskan yang dapat mengirim pesan ke chat ini",
         );
         return;
       }
@@ -1172,7 +1219,7 @@ export const CustomerService = ({
 
           // Update logic (append or replace if exists)
           const existingMsgIndex = chat.messages.findIndex(
-            (m) => m.id === transformedMessage.id
+            (m) => m.id === transformedMessage.id,
           );
           let newMessages;
 
@@ -1192,7 +1239,7 @@ export const CustomerService = ({
               minute: "2-digit",
             }),
           };
-        })
+        }),
       );
 
       // 6. Update Active Window Messages
@@ -1234,8 +1281,8 @@ export const CustomerService = ({
                   | "assigned"
                   | "resolved",
               }
-            : chat
-        )
+            : chat,
+        ),
       );
 
       toast.success("Chat berhasil diassign ke Anda");
@@ -1258,8 +1305,8 @@ export const CustomerService = ({
                 ...chat,
                 status: "resolved",
               }
-            : chat
-        )
+            : chat,
+        ),
       );
 
       toast.success("Chat berhasil diresolve");
@@ -1292,8 +1339,8 @@ export const CustomerService = ({
                 assignedTo: updatedChat.human_agent_name || undefined,
                 status: "assigned",
               }
-            : chat
-        )
+            : chat,
+        ),
       );
 
       toast.success("Chat berhasil di-escalate ke human agent");
@@ -1313,7 +1360,7 @@ export const CustomerService = ({
       | "resolvedToday"
       | "avgResponseTime"
       | "lastActive"
-    >
+    >,
   ) => {
     try {
       const newAgent = await crmAgentsService.createAgent(agentData);
@@ -1321,22 +1368,22 @@ export const CustomerService = ({
       toast.success("Agent berhasil ditambahkan");
     } catch (error) {
       toast.error(
-        error.message || "Gagal menambahkan agent. Silakan coba lagi."
+        error.message || "Gagal menambahkan agent. Silakan coba lagi.",
       );
     }
   };
 
   const handleUpdateAgentStatus = async (
     agentId: string,
-    status: "active" | "inactive" | "busy"
+    status: "active" | "inactive" | "busy",
   ) => {
     try {
       const updatedAgent = await crmAgentsService.updateAgentStatus(
         agentId,
-        status as AgentStatus
+        status as AgentStatus,
       );
       setAgents((prev) =>
-        prev.map((agent) => (agent.id === agentId ? updatedAgent : agent))
+        prev.map((agent) => (agent.id === agentId ? updatedAgent : agent)),
       );
       toast.success(`Status agent berhasil diupdate ke ${status}`);
     } catch (error) {
@@ -1350,8 +1397,8 @@ export const CustomerService = ({
       await crmAgentsService.updateAgentSettings(agentId, settings);
       setAgents((prev) =>
         prev.map((agent) =>
-          agent.id === agentId ? { ...agent, settings } : agent
-        )
+          agent.id === agentId ? { ...agent, settings } : agent,
+        ),
       );
       toast.success("Settings agent berhasil disimpan");
     } catch (error) {
@@ -1364,7 +1411,7 @@ export const CustomerService = ({
     ticket: Omit<
       Ticket,
       "id" | "ticketNumber" | "createdAt" | "updatedAt" | "relatedMessages"
-    >
+    >,
   ) => {
     if (!activeChat) return;
 
@@ -1423,8 +1470,8 @@ export const CustomerService = ({
                 ...chat,
                 tickets: [...(chat.tickets || []), newTicket],
               }
-            : chat
-        )
+            : chat,
+        ),
       );
 
       toast.success("Ticket berhasil dibuat");
@@ -1474,7 +1521,7 @@ export const CustomerService = ({
 
       // 3. UX: Handle "Existing Chat" logic
       const existingChat = chatsRef.current.find(
-        (c) => c.id === createdChat.id
+        (c) => c.id === createdChat.id,
       );
 
       // Whether existing or new, we want to set it as active
@@ -1502,7 +1549,7 @@ export const CustomerService = ({
             prev.some(
               (m) =>
                 m.content === data.initialMessage &&
-                m.timestamp === optimisticMessage.timestamp
+                m.timestamp === optimisticMessage.timestamp,
             )
           )
             return prev;
@@ -1536,7 +1583,7 @@ export const CustomerService = ({
       }
 
       toast.success(
-        existingChat ? "Opened existing chat" : "Chat created successfully"
+        existingChat ? "Opened existing chat" : "Chat created successfully",
       );
     } catch (error: any) {
       console.error("Error creating chat:", error);
@@ -1546,7 +1593,7 @@ export const CustomerService = ({
 
   const handleUpdateTicket = async (
     ticketId: string,
-    updates: Partial<Ticket>
+    updates: Partial<Ticket>,
   ) => {
     try {
       const apiUpdates: any = {};
@@ -1563,7 +1610,7 @@ export const CustomerService = ({
 
       const updatedTicket = await crmChatsService.updateTicket(
         ticketId,
-        apiUpdates
+        apiUpdates,
       );
 
       setChats((prevChats) =>
@@ -1575,7 +1622,7 @@ export const CustomerService = ({
                   ...ticket,
                   ...updates,
                   updatedAt: new Date(
-                    updatedTicket.updated_at
+                    updatedTicket.updated_at,
                   ).toLocaleString(),
                   ...(updates.status === "resolved" && !ticket.resolvedAt
                     ? { resolvedAt: new Date().toLocaleString() }
@@ -1584,17 +1631,17 @@ export const CustomerService = ({
                     ? { closedAt: new Date().toLocaleString() }
                     : {}),
                 }
-              : ticket
+              : ticket,
           ),
-        }))
+        })),
       );
 
       // Update kanban tickets as well if in ticketing view
       if (viewMode === "ticketing") {
         setKanbanTickets((prev) =>
           prev.map((ticket) =>
-            ticket.id === ticketId ? { ...ticket, ...updates } : ticket
-          )
+            ticket.id === ticketId ? { ...ticket, ...updates } : ticket,
+          ),
         );
       }
 
@@ -1709,6 +1756,9 @@ export const CustomerService = ({
                   filters={filters}
                   onFiltersChange={setFilters}
                   isLoading={chatsLoading}
+                  onLoadMore={() => loadChats(true)}
+                  hasMore={hasMoreChats}
+                  isLoadingMore={isLoadingMoreChats}
                 />
               </div>
 
@@ -1750,6 +1800,9 @@ export const CustomerService = ({
               onCreateTicket={handleCreateTicket}
               onUpdateTicket={handleUpdateTicket}
               messages={currentChatMessages}
+              // NEW PROPS
+              onLoadMoreMessages={handleLoadMoreMessages}
+              hasMoreMessages={hasMoreMessages}
             />
           </>
         ) : (

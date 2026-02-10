@@ -141,7 +141,6 @@ export interface ChatEscalationRequest {
 
 // NEW: Chat List Query Params
 export interface ChatListParams {
-  // Existing params...
   status_filter?: ChatStatus;
   channel?: CommunicationChannel;
   assigned_agent_id?: string;
@@ -153,8 +152,6 @@ export interface ChatListParams {
   human_assigned_to?: string;
   escalated?: boolean;
   unassigned?: boolean;
-
-  // NEW: Date Range params
   created_after?: string;
   created_before?: string;
 }
@@ -196,21 +193,22 @@ export interface SendMessageParams {
  * Get all chats with optional filters
  */
 export const getChats = async (
-  params?: ChatListParams
+  params?: ChatListParams,
 ): Promise<ChatObject> => {
   const queryParams = new URLSearchParams();
 
-  // Existing filters
   if (params?.status_filter)
     queryParams.append("status_filter", params.status_filter);
   if (params?.channel) queryParams.append("channel", params.channel);
   if (params?.assigned_agent_id)
     queryParams.append("assigned_agent_id", params.assigned_agent_id);
+
   if (params?.search) queryParams.append("search", params.search);
   if (params?.skip !== undefined)
     queryParams.append("skip", params.skip.toString());
   if (params?.limit !== undefined)
     queryParams.append("limit", params.limit.toString());
+
   if (params?.handled_by) queryParams.append("handled_by", params.handled_by);
   if (params?.ai_assigned_to)
     queryParams.append("ai_assigned_to", params.ai_assigned_to);
@@ -220,17 +218,12 @@ export const getChats = async (
     queryParams.append("escalated", params.escalated.toString());
   if (params?.unassigned !== undefined)
     queryParams.append("unassigned", params.unassigned.toString());
-
-  // NEW: Append Date Params
   if (params?.created_after)
     queryParams.append("created_after", params.created_after);
   if (params?.created_before)
     queryParams.append("created_before", params.created_before);
 
-  const url = `/crm/chats${
-    queryParams.toString() ? `?${queryParams.toString()}` : ""
-  }`;
-
+  const url = `/crm/chats${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
   return apiClient.get<ChatObject>(url);
 };
 
@@ -267,7 +260,7 @@ export const assignChat = async (
   options?: {
     assignToMe?: boolean;
     reason?: string;
-  }
+  },
 ): Promise<Chat> => {
   // If assignToMe is true, use assigned_to_me parameter
   if (options?.assignToMe) {
@@ -288,7 +281,7 @@ export const assignChat = async (
  */
 export const escalateChat = async (
   chatId: string,
-  data: ChatEscalationRequest
+  data: ChatEscalationRequest,
 ): Promise<Chat> => {
   return apiClient.put<Chat>(`/crm/chats/${chatId}/escalate`, data);
 };
@@ -305,13 +298,18 @@ export const resolveChat = async (chatId: string): Promise<Chat> => {
  */
 export const getChatMessages = async (
   chatId: string,
-  params?: { skip?: number; limit?: number }
+  params?: {
+    skip?: number;
+    limit?: number;
+    sort_order?: "asc" | "desc";
+  },
 ): Promise<MessagesResponse> => {
   const queryParams = new URLSearchParams();
   if (params?.skip !== undefined)
     queryParams.append("skip", params.skip.toString());
   if (params?.limit !== undefined)
     queryParams.append("limit", params.limit.toString());
+  if (params?.sort_order) queryParams.append("sort_order", params.sort_order);
 
   const url = `/crm/chats/${chatId}/messages${
     queryParams.toString() ? `?${queryParams.toString()}` : ""
@@ -444,7 +442,7 @@ export const updateTicket = async (
     status?: TicketStatus;
     assigned_agent_id?: string;
     tags?: string[];
-  }
+  },
 ): Promise<Ticket> => {
   return apiClient.put<Ticket>(`/crm/tickets/${ticketId}`, updates);
 };
@@ -454,7 +452,7 @@ export const updateTicket = async (
  */
 export const assignTicket = async (
   ticketId: string,
-  agentId: string
+  agentId: string,
 ): Promise<Ticket> => {
   return apiClient.put<Ticket>(`/crm/tickets/${ticketId}/assign`, {
     assigned_agent_id: agentId,
@@ -496,7 +494,7 @@ export const getCustomer = async (customerId: string): Promise<Customer> => {
  * Get activity history for a specific ticket
  */
 export const getTicketActivities = async (
-  ticketId: string
+  ticketId: string,
 ): Promise<TicketActivity[]> => {
   return apiClient.get<TicketActivity[]>(`/crm/tickets/${ticketId}/activities`);
 };

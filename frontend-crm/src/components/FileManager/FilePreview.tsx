@@ -123,7 +123,7 @@ const DocumentViewer = ({
   if (isOfficeDoc) {
     // Use Microsoft Office Online viewer for Office documents
     const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
-      url
+      url,
     )}`;
     return (
       <div className="w-full h-[600px]">
@@ -233,7 +233,10 @@ export const FilePreview = ({ file, isOpen, onClose }: FilePreviewProps) => {
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-6xl w-full h-[80vh] flex flex-col">
+      <DialogContent
+        className="max-w-6xl w-full h-[80vh] flex flex-col"
+        showCloseButton={true}
+      >
         <DialogHeader>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
