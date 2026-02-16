@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -46,12 +46,19 @@ import {
   Briefcase,
   Calculator as CalculatorIcon,
   TrendingUp,
+  ArrowRight,
+  ChevronRight,
+  ChevronLeft,
+  ChevronsRight,
+  ChevronsLeft,
+  List,
 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { FileItem, useFiles } from "@/hooks/useFiles";
 import { FilePreview } from "./FileManager/FilePreview";
 import { ChatHistoryService, Topic } from "@/lib/chatHistoryService";
 import { ConfirmDeleteChatDialog } from "./ConfirmDeleteChatDialog";
+import { toast as notify } from "sonner";
 
 type FileObj = {
   id: string;
@@ -141,6 +148,9 @@ export const AIChatModal = ({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [expandedRefs, setExpandedRefs] = useState<Record<string, boolean>>({});
+  const isDesktop = useMediaQuery("(min-width: 768px)"); // md breakpoint default Tailwind [web:63]
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false); // khusus mobile drawer
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false); // khusus desktop collapse
 
   // Chat history states (API-based)
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -164,6 +174,31 @@ export const AIChatModal = ({
   );
 
   const { files, error } = useFiles("all", null, "name", "asc");
+
+  function useMediaQuery(query: string) {
+    const [matches, setMatches] = React.useState(false);
+
+    React.useEffect(() => {
+      const mql = window.matchMedia(query);
+      const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
+
+      setMatches(mql.matches);
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    }, [query]);
+
+    return matches;
+  }
+
+  // Desktop: sidebar dianggap "open" selalu; Mobile: default closed
+  React.useEffect(() => {
+    if (isDesktop) {
+      setIsSidebarOpen(true); // desktop selalu “open” (tidak off-canvas)
+    } else {
+      setIsSidebarOpen(false); // mobile default tertutup
+      setIsSidebarCollapsed(false); // reset biar tidak aneh saat pindah mode
+    }
+  }, [isDesktop]);
 
   // State untuk toggle expanded per message
   const toggleRefsView = (messageId: string) => {
@@ -446,7 +481,7 @@ export const AIChatModal = ({
       const shouldCreateTopic = isTemporarySession && !topicId;
 
       if (shouldCreateTopic) {
-        // setConversationLoading(true);
+        setConversationLoading(true);
         console.log("[First Message] Creating topic with title from query");
         try {
           // Set flag to prevent useEffect from clearing messages
@@ -494,7 +529,7 @@ export const AIChatModal = ({
         true, // save_history = true
       );
 
-      // setConversationLoading(false);
+      setConversationLoading(false);
       // Validasi minimal
       const answer = data?.answer ?? "Tidak ada jawaban dari server.";
       const referenceDocuments: ReferenceDocument[] = Array.isArray(
@@ -604,6 +639,15 @@ export const AIChatModal = ({
     });
   };
 
+  const handleCopy = async (messages: string) => {
+    try {
+      await navigator.clipboard.writeText(messages);
+      notify.success("Berhasil disalin");
+    } catch (e) {
+      notify.error("Gagal menyalin");
+    }
+  };
+
   const handleConfirmDeleteChat = async () => {
     if (!deletingTopicId) return;
     try {
@@ -618,442 +662,444 @@ export const AIChatModal = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className={`${
-          isFullscreen ? "max-w-full h-screen" : "max-w-6xl h-[80vh]"
-        } flex flex-col p-0 bg-background border-border`}
+        className={`
+          flex flex-col p-0 gap-0 bg-background border-border overflow-hidden
+          ${
+            isFullscreen
+              ? "w-screen h-screen max-w-none rounded-none"
+              : "w-[95vw] h-[95vh] sm:w-[90vw] sm:h-[85vh] md:max-w-4xl lg:max-w-6xl md:h-[80vh]"
+          }
+        `}
         showCloseButton={false}
       >
-        <DialogHeader className="relative p-4 pr-14 border-b border-border">
-          <div className="flex items-center justify-between w-full gap-4">
-            <div className="flex items-center gap-4">
-              <DialogTitle className="flex items-center gap-2 text-foreground">
+        <DialogHeader className="shrink-0 px-3 py-2 sm:px-4 sm:py-3 border-b border-border">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <h2 className="font-semibold text-sm sm:text-base truncate">
                 AI Agent Chat
-              </DialogTitle>
-
-              {/* Agent Selector */}
-              <Select value={selectedAgent} onValueChange={setSelectedAgent}>
-                <SelectTrigger className="w-[220px] h-9 bg-background">
-                  <SelectValue>
-                    {(() => {
-                      const agent = AGENTS.find((a) => a.id === selectedAgent);
-                      const Icon = agent?.icon || Sparkles;
-                      return (
-                        <div className="flex items-center gap-2">
-                          <Icon className="w-4 h-4 text-primary" />
-                          <span className="text-sm">{agent?.name}</span>
-                        </div>
-                      );
-                    })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {AGENTS.map((agent) => {
-                    const Icon = agent.icon;
-                    const isDisabled = agent.id !== "default";
-                    return (
-                      <SelectItem
-                        key={agent.id}
-                        value={agent.id}
-                        disabled={isDisabled}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Icon
-                            className={`w-4 h-4 ${
-                              isDisabled
-                                ? "text-muted-foreground"
-                                : "text-primary"
-                            }`}
-                          />
-                          <div className="flex flex-col">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`font-medium ${
-                                  isDisabled ? "text-muted-foreground" : ""
-                                }`}
-                              >
-                                {agent.name}
-                              </span>
-                              {isDisabled && (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] px-1 py-0 h-4"
-                                >
-                                  Coming Soon
-                                </Badge>
-                              )}
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {agent.description}
-                            </span>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
+              </h2>
+              <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                {selectedAgent === "default" ? "Default Agent" : "Agent"}
+              </span>
             </div>
 
-            {/* Right actions (sejajar) */}
-            <div className="absolute right-4 top-4 flex items-center gap-2">
+            <div className="flex items-center gap-1">
               <Button
                 variant="ghost"
-                size="sm"
+                size="icon"
+                className="h-8 w-8"
                 onClick={() => setIsFullscreen(!isFullscreen)}
-                className="h-8 w-8 p-0 hover:bg-muted"
-                title={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
               >
                 {isFullscreen ? (
-                  <Minimize className="w-4 h-4" />
+                  <Minimize className="h-4 w-4" />
                 ) : (
-                  <Maximize className="w-4 h-4" />
+                  <Maximize className="h-4 w-4" />
                 )}
               </Button>
-
-              <DialogClose className="h-8 w-8 inline-flex items-center justify-center rounded-sm opacity-70 hover:opacity-100 hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
+              <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                </Button>
               </DialogClose>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="flex flex-1 overflow-hidden">
-          {/* Left Sidebar - Chat History */}
-          <div className="w-64 border-r border-border flex flex-col bg-muted/20">
-            <div className="p-3 border-b border-border">
-              <Button
-                onClick={createNewChat}
-                className="w-full justify-start gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                size="sm"
-              >
-                <MessageSquarePlus className="w-4 h-4" />
-                <span className="text-sm">New Chat</span>
-              </Button>
+        <div className="relative flex flex-1 min-h-0 overflow-hidden">
+          {!isDesktop && isSidebarOpen && (
+            <div
+              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+              onClick={() => setIsSidebarOpen(false)}
+            />
+          )}
+
+          <aside
+            className={`
+              flex flex-col bg-background border-r border-border
+              transition-all duration-300 ease-in-out
+              ${
+                isDesktop
+                  ? `relative shrink-0 ${isSidebarCollapsed ? "w-34" : "w-64 lg:w-72"}`
+                  : `fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] shadow-2xl
+                   ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`
+              }
+            `}
+          >
+            <div className="shrink-0 p-2 sm:p-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={() => {
+                    createNewChat();
+                    if (!isDesktop) setIsSidebarOpen(false);
+                  }}
+                  size="sm"
+                  className={`
+                    h-9 gap-2 bg-primary text-primary-foreground hover:bg-primary/90
+                    ${isDesktop && isSidebarCollapsed ? "w-24p-0 justify-center" : "flex-1 justify-start"}
+                  `}
+                >
+                  <MessageSquarePlus className="h-4 w-4 shrink-0" />
+                  {!(isDesktop && isSidebarCollapsed) && (
+                    <span className="text-sm">New Chat</span>
+                  )}
+                </Button>
+
+                {!isDesktop && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setIsSidebarOpen(false)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
+
+                {isDesktop && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 shrink-0"
+                    onClick={() => setIsSidebarCollapsed((v) => !v)}
+                  >
+                    {isSidebarCollapsed ? (
+                      <ChevronsRight className="h-4 w-4" />
+                    ) : (
+                      <ChevronsLeft className="h-4 w-4" />
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
 
             <ScrollArea className="flex-1">
               <div className="p-2 space-y-1">
                 {isLoadingTopics ? (
-                  <div className="p-4 text-center">
-                    <Loader2 className="w-4 h-4 animate-spin mx-auto text-muted-foreground" />
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                     <p className="text-xs text-muted-foreground mt-2">
                       Loading...
                     </p>
                   </div>
                 ) : !Array.isArray(topics) || topics.length === 0 ? (
-                  <div className="p-4 text-center">
-                    <p className="text-xs text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center py-8 px-4">
+                    <MessageSquare className="h-8 w-8 text-muted-foreground/50 mb-2" />
+                    <p className="text-xs text-muted-foreground text-center">
                       No chat history yet
                     </p>
                   </div>
                 ) : (
-                  Array.isArray(topics) &&
                   topics.map((topic) => (
                     <div
                       key={topic.id}
-                      className={`group relative rounded-lg border transition-all cursor-pointer ${
-                        currentTopicId === topic.id ||
-                        activeTopicForHighlight === topic.id
-                          ? "bg-primary/10 border-primary/20"
-                          : "bg-card border-border hover:bg-muted/50"
-                      }`}
+                      className={`
+                        group relative rounded-lg border cursor-pointer
+                        transition-colors duration-150
+                        ${
+                          currentTopicId === topic.id ||
+                          activeTopicForHighlight === topic.id
+                            ? "bg-primary/10 border-primary/30"
+                            : "bg-card border-transparent hover:bg-muted/50 hover:border-border"
+                        }
+                      `}
                       onClick={() => {
-                        console.log(
-                          "[Topic Click] Switching to topic:",
-                          topic.id,
-                        );
                         setCurrentTopicId(topic.id);
-                        activeTopicIdRef.current = topic.id; // Sync ref with state
-                        setActiveTopicForHighlight(topic.id); // Update highlight
-                        setIsTemporarySession(false); // Exit temporary session when switching to real topic
+                        activeTopicIdRef.current = topic.id;
+                        setActiveTopicForHighlight(topic.id);
+                        setIsTemporarySession(false);
+                        if (!isDesktop) setIsSidebarOpen(false);
                       }}
+                      title={
+                        isDesktop && isSidebarCollapsed
+                          ? topic.title
+                          : undefined
+                      }
                     >
-                      <div className="p-3 pr-8">
+                      <div
+                        className={`p-2.5 ${!(isDesktop && isSidebarCollapsed) ? "pr-8" : ""}`}
+                      >
                         <div className="flex items-start gap-2">
-                          <MessageSquare className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground truncate">
-                              {topic.title}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {new Date(topic.updated_at).toLocaleDateString()}
-                            </p>
-                          </div>
+                          <MessageSquare className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                          {!(isDesktop && isSidebarCollapsed) && (
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">
+                                {topic.title}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {new Date(
+                                  topic.updated_at,
+                                ).toLocaleDateString()}
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
+
                       <Button
                         variant="ghost"
-                        size="sm"
+                        size="icon"
+                        className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 
+                                     hover:bg-destructive/10 hover:text-destructive transition-opacity"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeletingTopicId(topic.id);
                           setDeletingTitle(topic.title);
                           setDeleteDialogOpen(true);
                         }}
-                        className="absolute top-2 right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-destructive/10 hover:text-destructive"
-                        title="Delete chat"
                       >
-                        <Trash2 className="w-3 h-3" />
+                        <Trash2 className="h-3 w-3" />
                       </Button>
                     </div>
                   ))
                 )}
               </div>
             </ScrollArea>
-          </div>
+          </aside>
 
-          {/* Right Side - Chat Interface */}
-          <div className="flex-1 flex flex-col">
-            {/* Chat Messages */}
-            <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
-              {conversationLoading == true ? (
-                <>
-                  <div className="flex flex-col items-center justify-center h-full text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
+            <div className="shrink-0 md:hidden border-b border-border px-3 py-2 flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => setIsSidebarOpen(true)}
+              >
+                <List className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground truncate">
+                {selectedAgent === "default" ? "Default Agent" : "Agent"}
+              </span>
+            </div>
+
+            <ScrollArea ref={scrollAreaRef} className="flex-1 min-h-0">
+              <div className="p-3 sm:p-4 lg:p-6">
+                {conversationLoading || isLoadingMessages ? (
+                  <div className="flex flex-col items-center justify-center min-h-[50vh]">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
                     <p className="text-sm text-muted-foreground">
                       Loading conversation...
                     </p>
                   </div>
-                </>
-              ) : messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="flex items-center justify-center w-16 h-16 mb-4 bg-primary/10 rounded-full">
-                    <Bot className="w-8 h-8 text-primary" />
+                ) : messages.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center min-h-[50vh] text-center px-4">
+                    <div className="flex items-center justify-center h-16 w-16 rounded-full bg-primary/10 mb-4">
+                      <Bot className="h-8 w-8 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-semibold mb-2">
+                      Selamat datang di AI Agent Chat
+                    </h3>
+                    <p className="text-sm text-muted-foreground max-w-sm">
+                      Mulai percakapan dengan mengetik pertanyaan atau query.
+                      Chat session akan berakhir ketika modal ditutup.
+                    </p>
                   </div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">
-                    Selamat datang di AI Agent Chat
-                  </h3>
-                  <p className="text-muted-foreground text-sm max-w-md">
-                    Mulai percakapan dengan mengetik pertanyaan atau query. Chat
-                    session akan berakhir ketika modal ditutup.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex w-full ${
-                        message.role === "user"
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}
-                    >
+                ) : (
+                  <div className="space-y-4 sm:space-y-6">
+                    {messages.map((message) => (
                       <div
-                        className={`flex items-start gap-3 max-w-[80%] ${
+                        key={message.id}
+                        className={`flex gap-2 sm:gap-3 ${
                           message.role === "user"
                             ? "flex-row-reverse"
                             : "flex-row"
                         }`}
                       >
-                        {message.role === "assistant" ? (
-                          <Avatar className="w-8 h-8 bg-primary/10 flex items-center justify-center flex-shrink-0">
-                            <Bot className="w-4 h-4 text-primary" />
-                          </Avatar>
-                        ) : (
-                          <Avatar className="w-8 h-8 bg-secondary flex items-center justify-center flex-shrink-0">
-                            <User className="w-4 h-4 text-secondary-foreground" />
-                          </Avatar>
-                        )}
+                        <Avatar className="h-7 w-7 sm:h-8 sm:w-8 shrink-0 flex items-center justify-center">
+                          {message.role === "assistant" ? (
+                            <Bot className="h-4 w-4 text-primary" />
+                          ) : (
+                            <User className="h-4 w-4 text-secondary-foreground" />
+                          )}
+                        </Avatar>
 
                         <div
-                          className={`flex-1 ${
-                            message.role === "user" ? "text-right" : "text-left"
-                          }`}
+                          className={`
+                            flex flex-col min-w-0
+                            max-w-[85%] sm:max-w-[75%] lg:max-w-[70%]
+                            ${message.role === "user" ? "items-end" : "items-start"}
+                          `}
                         >
                           <Card
-                            className={`p-3 ${
-                              message.role === "user"
-                                ? "bg-primary text-primary-foreground ml-4"
-                                : "bg-muted mr-4"
-                            }`}
+                            className={`
+                              px-3 py-2 sm:px-4 sm:py-3 shadow-sm
+                              ${
+                                message.role === "user"
+                                  ? "bg-primary text-primary-foreground rounded-2xl rounded-tr-sm"
+                                  : "bg-muted rounded-2xl rounded-tl-sm"
+                              }
+                            `}
                           >
                             {message.images && message.images.length > 0 && (
-                              <div className="grid grid-cols-2 gap-2 mb-3 max-w-md">
+                              <div className="grid grid-cols-2 gap-2 mb-3">
                                 {message.images.map((img, idx) => (
                                   <img
                                     key={idx}
                                     src={img}
                                     alt={`Upload ${idx + 1}`}
-                                    className="rounded-lg max-h-32 object-cover border border-border"
+                                    className="rounded-lg max-h-32 w-full object-cover border border-border/50"
                                   />
                                 ))}
                               </div>
                             )}
+
                             <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
                               {message.content}
                             </p>
-                            <div
-                              className={`text-xs mt-2 opacity-70 ${
+
+                            <p
+                              className={`text-[10px] sm:text-xs mt-1.5 opacity-60 ${
                                 message.role === "user"
-                                  ? "text-primary-foreground/70"
+                                  ? "text-primary-foreground"
                                   : "text-muted-foreground"
                               }`}
                             >
                               {message.timestamp.toLocaleTimeString()}
-                            </div>
+                            </p>
                           </Card>
 
-                          {/* Label Sumber */}
                           {message.role === "assistant" &&
                             Array.isArray(message.reference_documents) &&
                             message.reference_documents.length > 0 && (
-                              <div className="mt-3 text-left">
-                                <h4 className="text-xs font-medium text-muted-foreground mb-2">
+                              <div className="mt-2 w-full">
+                                <p className="text-xs font-medium text-muted-foreground mb-1.5">
                                   Reference
-                                </h4>
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {(() => {
+                                    const isExpanded =
+                                      !!expandedRefs[message.id];
+                                    const items = message.reference_documents;
+                                    const displayItems = isExpanded
+                                      ? items
+                                      : items.slice(0, 3);
 
-                                {(() => {
-                                  const isExpanded = !!expandedRefs[message.id];
-                                  const items = message.reference_documents;
-
-                                  return (
-                                    <div
-                                      className={
-                                        isExpanded
-                                          ? "flex flex-col gap-2"
-                                          : "flex flex-row flex-wrap gap-2"
-                                      }
-                                    >
-                                      {items.map((ref, idx) => {
-                                        return (
-                                          <div
+                                    return (
+                                      <>
+                                        {displayItems.map((ref, idx) => (
+                                          <button
                                             key={idx}
-                                            className="inline-flex items-center"
+                                            type="button"
+                                            onClick={(e) =>
+                                              handlePreview(ref.file_id, e)
+                                            }
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-border 
+                                                       bg-background px-2 py-1 text-xs hover:border-primary/50 
+                                                       transition-colors max-w-[140px] sm:max-w-[180px]"
                                           >
-                                            <button
-                                              type="button"
-                                              onClick={(e) =>
-                                                handlePreview(ref.file_id, e)
-                                              }
-                                              className="group relative inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground shadow-sm hover:border-primary/50 cursor-pointer"
-                                              style={{ width: "12rem" }}
-                                            >
-                                              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                                                📄
-                                              </span>
-                                              <span
-                                                className="truncate text-xs"
-                                                title={ref.filename}
-                                              >
-                                                {ref.filename}
-                                              </span>
-                                            </button>
-                                          </div>
-                                        );
-                                      })}
-
-                                      {shouldShowMore(
-                                        items.length,
-                                        isExpanded,
-                                      ) && (
-                                        <Button
-                                          variant="outline"
-                                          className="h-8 px-3 text-xs"
-                                          onClick={() =>
-                                            setExpandedRefs((prev) => ({
-                                              ...prev,
-                                              [message.id]: true,
-                                            }))
-                                          }
-                                          title="Lihat semua"
-                                        >
-                                          ...
-                                        </Button>
-                                      )}
-
-                                      {isExpanded && (
-                                        <Button
-                                          variant="ghost"
-                                          className="h-8 px-3 text-xs self-start"
-                                          onClick={() =>
-                                            setExpandedRefs((prev) => ({
-                                              ...prev,
-                                              [message.id]: false,
-                                            }))
-                                          }
-                                          title="Sembunyikan"
-                                        >
-                                          Sembunyikan
-                                        </Button>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
+                                            <span>📄</span>
+                                            <span className="truncate">
+                                              {ref.filename}
+                                            </span>
+                                          </button>
+                                        ))}
+                                        {shouldShowMore(
+                                          items.length,
+                                          isExpanded,
+                                        ) && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={() =>
+                                              setExpandedRefs((prev) => ({
+                                                ...prev,
+                                                [message.id]: true,
+                                              }))
+                                            }
+                                          >
+                                            +{items.length - 3} more
+                                          </Button>
+                                        )}
+                                        {isExpanded && items.length > 3 && (
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-7 px-2 text-xs"
+                                            onClick={() =>
+                                              setExpandedRefs((prev) => ({
+                                                ...prev,
+                                                [message.id]: false,
+                                              }))
+                                            }
+                                          >
+                                            Show less
+                                          </Button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </div>
                             )}
 
                           {message.role === "assistant" && (
-                            <div className="flex items-center gap-2 mt-2">
+                            <div className="flex items-center gap-1 mt-1.5">
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 hover:bg-muted"
+                                size="icon"
+                                className="h-6 w-6"
+                                onClick={() => handleCopy(message.content)}
                               >
-                                <Copy className="w-3 h-3" />
+                                <Copy className="h-3 w-3" />
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 hover:bg-muted"
+                                size="icon"
+                                className="h-6 w-6"
                               >
-                                <ThumbsUp className="w-3 h-3" />
+                                <ThumbsUp className="h-3 w-3" />
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 hover:bg-muted"
+                                size="icon"
+                                className="h-6 w-6"
                               >
-                                <ThumbsDown className="w-3 h-3" />
+                                <ThumbsDown className="h-3 w-3" />
                               </Button>
                             </div>
                           )}
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
 
-                  {isLoading && (
-                    <div className="flex justify-start w-full">
-                      <div className="flex items-start gap-3 max-w-[80%]">
-                        <Avatar className="w-8 h-8 bg-primary/10 flex items-center justify-center">
-                          <Bot className="w-4 h-4 text-primary" />
+                    {isLoading && (
+                      <div className="flex gap-3">
+                        <Avatar className="h-8 w-8 shrink-0 flex items-center justify-center bg-primary/10">
+                          <Bot className="h-4 w-4 text-primary" />
                         </Avatar>
-                        <Card className="p-3 bg-muted">
+                        <Card className="px-4 py-3 bg-muted">
                           <div className="flex items-center gap-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                             <span className="text-sm text-muted-foreground">
                               AI sedang memproses...
                             </span>
                           </div>
                         </Card>
                       </div>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+              </div>
             </ScrollArea>
 
-            {/* Input Area */}
-            <div className="border-t border-border p-4">
-              {/* Image Preview */}
+            <div className="shrink-0 border-t border-border bg-background p-2 sm:p-3 lg:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
               {images.length > 0 && (
-                <div className="grid grid-cols-4 gap-2 mb-4">
+                <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
                   {images.map((img, idx) => (
-                    <div key={idx} className="relative group">
+                    <div key={idx} className="relative shrink-0 group">
                       <img
                         src={img}
                         alt={`Preview ${idx + 1}`}
-                        className="w-full h-16 object-cover rounded-md border border-border"
+                        className="h-14 w-14 sm:h-16 sm:w-16 object-cover rounded-lg border border-border"
                       />
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute -top-2 -right-2 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 opacity-0 group-hover:opacity-100 
+                                   transition-opacity shadow-sm"
                         onClick={() => removeImage(idx)}
                       >
-                        <X className="w-3 h-3" />
+                        <X className="h-3 w-3" />
                       </Button>
                     </div>
                   ))}
@@ -1063,34 +1109,33 @@ export const AIChatModal = ({
               <div className="flex items-end gap-2">
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
+                  className="h-9 w-9 sm:h-10 sm:w-10 shrink-0"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
-                  className="h-8 w-8 p-0 hover:bg-muted"
                 >
-                  <Paperclip className="w-4 h-4" />
+                  <Paperclip className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
 
-                <div className="flex-1 relative">
-                  <Textarea
-                    ref={textareaRef}
-                    placeholder="Ketik query atau pertanyaan..."
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyPress}
-                    disabled={isLoading}
-                    className="resize-none min-h-10 max-h-32 pr-10 py-2 border-border bg-background text-foreground placeholder:text-muted-foreground"
-                    rows={1}
-                  />
-                </div>
+                <Textarea
+                  ref={textareaRef}
+                  placeholder="Ketik query atau pertanyaan..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  disabled={isLoading}
+                  className="flex-1 min-h-[36px] sm:min-h-[40px] max-h-32 resize-none py-2 px-3 
+                             text-sm sm:text-base rounded-xl border-border"
+                  rows={1}
+                />
 
                 <Button
-                  size="sm"
+                  size="icon"
+                  className="h-9 w-9 sm:h-10 sm:w-10 shrink-0 rounded-xl"
                   onClick={handleSend}
                   disabled={isLoading || (!input.trim() && images.length === 0)}
-                  className="h-8 w-8 p-0"
                 >
-                  <Send className="w-4 h-4" />
+                  <Send className="h-4 w-4 sm:h-5 sm:w-5" />
                 </Button>
               </div>
 

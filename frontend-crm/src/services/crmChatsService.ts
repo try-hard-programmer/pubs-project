@@ -57,6 +57,13 @@ export interface Chat {
   escalated_at?: string | null;
   escalation_reason?: string | null;
 
+  // ✅ ADD THIS SECTION
+  metadata?: {
+    is_group?: boolean;
+    group_name?: string;
+    [key: string]: any;
+  };
+
   // Existing fields
   status: ChatStatus;
   channel: CommunicationChannel;

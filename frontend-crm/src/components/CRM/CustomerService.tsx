@@ -150,6 +150,7 @@ interface Chat {
   createdDate: string;
   solvedBy?: string;
   tickets?: Ticket[];
+  isGroup?: boolean;
 }
 
 /**
@@ -374,6 +375,7 @@ export const CustomerService = ({
             // ... existing mapping logic (copy from your original code) ...
             // Mapping logic skipped for brevity as requested
             let assignedAgent: Agent | undefined;
+            const isGroup = apiChat?.metadata?.is_group || false;
             return {
               id: apiChat.id,
               customerId: apiChat.customer_id,
@@ -406,6 +408,7 @@ export const CustomerService = ({
                 ? assignedAgent?.name
                 : undefined,
               tickets: [],
+              isGroup: isGroup,
             };
           }),
         );

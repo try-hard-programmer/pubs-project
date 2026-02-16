@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,25 +6,31 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator';
-import { Bell, BellOff, Volume2, VolumeX, Filter, TestTube2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { useNotificationPreferences } from '@/contexts/NotificationPreferencesContext';
-import { playNotificationSound } from '@/utils/audioNotification';
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import {
+  Bell,
+  BellOff,
+  Volume2,
+  VolumeX,
+  Filter,
+  TestTube2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { useNotificationPreferences } from "@/contexts/NotificationPreferencesContext";
+import { playNotificationSound } from "@/utils/audioNotification";
 
 interface NotificationPreferencesDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDialogProps> = ({
-  open,
-  onOpenChange,
-}) => {
+export const NotificationPreferencesDialog: React.FC<
+  NotificationPreferencesDialogProps
+> = ({ open, onOpenChange }) => {
   const {
     preferences,
     updatePreferences,
@@ -44,17 +50,17 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
     try {
       const permission = await requestBrowserNotificationPermission();
 
-      if (permission === 'granted') {
-        toast.success('Browser notifications enabled!');
-      } else if (permission === 'denied') {
+      if (permission === "granted") {
+        toast.success("Browser notifications enabled!");
+      } else if (permission === "denied") {
         toast.error(
-          'Browser notifications denied. Please enable them in your browser settings.'
+          "Browser notifications denied. Please enable them in your browser settings.",
         );
       } else {
-        toast.info('Browser notification permission not granted.');
+        toast.info("Browser notification permission not granted.");
       }
     } catch (error) {
-      toast.error('Failed to request notification permission');
+      toast.error("Failed to request notification permission");
     } finally {
       setIsRequestingPermission(false);
     }
@@ -66,33 +72,42 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
   const handleTestNotification = () => {
     // Show toast notification
     if (preferences.enableToast) {
-      toast.info('This is a test notification!', {
-        description: 'If you can see this, toast notifications are working.',
+      toast.info("This is a test notification!", {
+        description: "If you can see this, toast notifications are working.",
       });
     }
 
     // Show browser notification
-    if (preferences.enableBrowserNotification && browserNotificationPermission === 'granted') {
+    if (
+      preferences.enableBrowserNotification &&
+      browserNotificationPermission === "granted"
+    ) {
       try {
-        const notification = new Notification('Test Notification', {
-          body: 'This is a test notification from Syntra CRM',
-          icon: '/favicon.ico',
+        const notification = new Notification("Test Notification", {
+          body: "This is a test notification from Palapa CRM",
+          icon: "/favicon.ico",
         });
 
         setTimeout(() => notification.close(), 5000);
       } catch (error) {
-        console.error('Failed to show test browser notification:', error);
+        console.error("Failed to show test browser notification:", error);
       }
     }
 
     // Play sound
     if (preferences.enableSound) {
-      playNotificationSound('message', 0.5);
+      playNotificationSound("message", 0.5);
     }
 
     // If nothing is enabled
-    if (!preferences.enableToast && !preferences.enableBrowserNotification && !preferences.enableSound) {
-      toast.error('All notifications are disabled. Enable at least one to test.');
+    if (
+      !preferences.enableToast &&
+      !preferences.enableBrowserNotification &&
+      !preferences.enableSound
+    ) {
+      toast.error(
+        "All notifications are disabled. Enable at least one to test.",
+      );
     }
   };
 
@@ -101,7 +116,7 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
    */
   const handleResetToDefaults = () => {
     resetToDefaults();
-    toast.success('Settings reset to defaults');
+    toast.success("Settings reset to defaults");
   };
 
   return (
@@ -121,8 +136,15 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
           {/* Toast Notifications */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="toast-notifications" className="text-base flex items-center gap-2">
-                {preferences.enableToast ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4 text-muted-foreground" />}
+              <Label
+                htmlFor="toast-notifications"
+                className="text-base flex items-center gap-2"
+              >
+                {preferences.enableToast ? (
+                  <Bell className="h-4 w-4" />
+                ) : (
+                  <BellOff className="h-4 w-4 text-muted-foreground" />
+                )}
                 Toast Notifications
               </Label>
               <p className="text-sm text-muted-foreground">
@@ -144,12 +166,20 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="browser-notifications" className="text-base flex items-center gap-2">
-                  {preferences.enableBrowserNotification ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4 text-muted-foreground" />}
+                <Label
+                  htmlFor="browser-notifications"
+                  className="text-base flex items-center gap-2"
+                >
+                  {preferences.enableBrowserNotification ? (
+                    <Bell className="h-4 w-4" />
+                  ) : (
+                    <BellOff className="h-4 w-4 text-muted-foreground" />
+                  )}
                   Browser Notifications
                 </Label>
                 <p className="text-sm text-muted-foreground">
-                  Show native browser notifications (even when tab is not active)
+                  Show native browser notifications (even when tab is not
+                  active)
                 </p>
               </div>
               <Switch
@@ -158,12 +188,12 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
                 onCheckedChange={(checked) =>
                   updatePreferences({ enableBrowserNotification: checked })
                 }
-                disabled={browserNotificationPermission === 'denied'}
+                disabled={browserNotificationPermission === "denied"}
               />
             </div>
 
             {/* Browser Permission Status */}
-            {browserNotificationPermission === 'default' && (
+            {browserNotificationPermission === "default" && (
               <div className="bg-muted p-3 rounded-md space-y-2">
                 <p className="text-sm">
                   Browser notification permission not granted yet.
@@ -174,26 +204,30 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
                   onClick={handleRequestBrowserPermission}
                   disabled={isRequestingPermission}
                 >
-                  {isRequestingPermission ? 'Requesting...' : 'Grant Permission'}
+                  {isRequestingPermission
+                    ? "Requesting..."
+                    : "Grant Permission"}
                 </Button>
               </div>
             )}
 
-            {browserNotificationPermission === 'denied' && (
+            {browserNotificationPermission === "denied" && (
               <div className="bg-destructive/10 p-3 rounded-md">
                 <p className="text-sm text-destructive">
-                  Browser notifications are blocked. Please enable them in your browser settings.
+                  Browser notifications are blocked. Please enable them in your
+                  browser settings.
                 </p>
               </div>
             )}
 
-            {browserNotificationPermission === 'granted' && preferences.enableBrowserNotification && (
-              <div className="bg-green-500/10 p-3 rounded-md">
-                <p className="text-sm text-green-600 dark:text-green-400">
-                  ✓ Browser notifications are enabled
-                </p>
-              </div>
-            )}
+            {browserNotificationPermission === "granted" &&
+              preferences.enableBrowserNotification && (
+                <div className="bg-green-500/10 p-3 rounded-md">
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    ✓ Browser notifications are enabled
+                  </p>
+                </div>
+              )}
           </div>
 
           <Separator />
@@ -201,8 +235,15 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
           {/* Sound Notifications */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="sound-notifications" className="text-base flex items-center gap-2">
-                {preferences.enableSound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4 text-muted-foreground" />}
+              <Label
+                htmlFor="sound-notifications"
+                className="text-base flex items-center gap-2"
+              >
+                {preferences.enableSound ? (
+                  <Volume2 className="h-4 w-4" />
+                ) : (
+                  <VolumeX className="h-4 w-4 text-muted-foreground" />
+                )}
                 Sound Notifications
               </Label>
               <p className="text-sm text-muted-foreground">
@@ -223,7 +264,10 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
           {/* Filter: Assigned Only */}
           <div className="flex items-center justify-between">
             <div className="space-y-0.5">
-              <Label htmlFor="filter-assigned" className="text-base flex items-center gap-2">
+              <Label
+                htmlFor="filter-assigned"
+                className="text-base flex items-center gap-2"
+              >
                 <Filter className="h-4 w-4" />
                 Assigned Chats Only
               </Label>
@@ -260,16 +304,10 @@ export const NotificationPreferencesDialog: React.FC<NotificationPreferencesDial
         </div>
 
         <DialogFooter className="flex justify-between items-center">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleResetToDefaults}
-          >
+          <Button variant="ghost" size="sm" onClick={handleResetToDefaults}>
             Reset to Defaults
           </Button>
-          <Button onClick={() => onOpenChange(false)}>
-            Done
-          </Button>
+          <Button onClick={() => onOpenChange(false)}>Done</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

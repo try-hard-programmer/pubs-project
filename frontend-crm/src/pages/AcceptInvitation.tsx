@@ -103,7 +103,7 @@ export const AcceptInvitation = () => {
 
     // ✅ COPIED: Strict Requirement Check
     const allRequirementsMet = Object.values(passwordRequirements).every(
-      (req) => req
+      (req) => req,
     );
     if (!allRequirementsMet) {
       toast.error("Password does not meet security requirements");
@@ -228,10 +228,10 @@ export const AcceptInvitation = () => {
               <img
                 src={
                   theme === "dark"
-                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-dark-2.png"
-                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-light.png"
+                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
+                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
                 }
-                alt="Syntra Logo"
+                alt="Palapa AI Logo"
                 className="h-full w-auto object-contain"
               />
             </div>

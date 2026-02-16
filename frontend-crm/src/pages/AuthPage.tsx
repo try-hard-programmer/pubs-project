@@ -62,12 +62,12 @@ export const AuthPage = () => {
       async (event, session) => {
         if (event === "PASSWORD_RECOVERY") {
           console.log(
-            "🔐 Recovery event detected! Redirecting to reset page..."
+            "🔐 Recovery event detected! Redirecting to reset page...",
           );
           // Ensure we don't get stuck in a loop; direct navigation is safe here
           navigate("/auth/reset-password");
         }
-      }
+      },
     );
 
     return () => {
@@ -150,7 +150,7 @@ export const AuthPage = () => {
     }
 
     const allRequirementsMet = Object.values(passwordRequirements).every(
-      (req) => req
+      (req) => req,
     );
     if (!allRequirementsMet) {
       toast.error("Password does not meet security requirements");
@@ -181,7 +181,7 @@ export const AuthPage = () => {
       }
 
       toast.success(
-        "Registration successful! Please check your email for confirmation."
+        "Registration successful! Please check your email for confirmation.",
       );
 
       setFullName("");
@@ -198,7 +198,7 @@ export const AuthPage = () => {
         toast.error("Email is already registered. Please sign in instead.");
       } else {
         toast.error(
-          error.message || "Failed to create account. Please try again."
+          error.message || "Failed to create account. Please try again.",
         );
       }
     } finally {
@@ -296,10 +296,10 @@ export const AuthPage = () => {
               <img
                 src={
                   theme === "dark"
-                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-dark-2.png"
-                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-light.png"
+                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
+                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
                 }
-                alt="Syntra Logo"
+                alt="Palapa AI Logo"
                 className="h-full w-auto object-contain"
               />
             </div>

@@ -61,6 +61,7 @@ interface Chat {
   status: "open" | "pending" | "assigned" | "resolved" | "closed";
   channel: string;
   handledBy: "ai" | "human" | "unassigned";
+  isGroup?: boolean;
 }
 
 // FIX: Ensure 'readStatus' is defined here
@@ -506,7 +507,14 @@ export const CustomerServiceSidebar = ({
                     <div className="flex items-center justify-between">
                       <h4 className="font-semibold text-sm truncate text-foreground/90">
                         {chat.customerName}
+                        {/* Simple mark from chat group */}
+                        {chat.isGroup && (
+                          <span className="ml-2 text-[10px] font-bold text-blue-500 border border-blue-200 px-1 rounded">
+                            Group
+                          </span>
+                        )}
                       </h4>
+
                       <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
                         {chat.timestamp}
                       </span>

@@ -106,17 +106,26 @@ export const Sidebar = ({
       <div className={`${isCollapsed ? "p-4" : "p-6"} border-b`}>
         <div className={`${isCollapsed ? "h-8" : "h-12"} flex justify-center`}>
           {isCollapsed ? (
-            <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-primary font-bold">S</span>
+            <div className="w-8 h-8 flex items-center justify-center">
+              <img
+                src={
+                  theme === "dark"
+                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/favicon.webp"
+                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/favicon.webp"
+                }
+                className="w-full object-fill-"
+                alt="Icon Palapa"
+              />
             </div>
           ) : (
             <img
               src={
                 theme === "dark"
-                  ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-dark-2.png"
-                  : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-light.png"
+                  ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
+                  : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
               }
-              className="h-full"
+              className="h-full object-contain"
+              alt="Palapa AI"
             />
           )}
         </div>
@@ -131,7 +140,9 @@ export const Sidebar = ({
               key={item.key}
               variant="ghost"
               className={`${isCollapsed ? "justify-center" : "justify-start"} ${
-                activeSection === item.key ? "bg-muted" : "hover:bg-muted/50"
+                activeSection === item.key
+                  ? "bg-[#906BFF] text-white hover:bg-[#906BFF]/90"
+                  : "hover:bg-muted/50"
               } w-full`}
               onClick={() => navigate(`/${item.key}`)}
             >
@@ -156,7 +167,11 @@ export const Sidebar = ({
             variant="ghost"
             className={`${
               isCollapsed ? "justify-center" : "justify-between"
-            } w-full`}
+            } w-full ${
+              activeSection === item.key
+                ? "bg-[#906BFF] text-white"
+                : "hover:bg-muted/50"
+            }`}
             onClick={() =>
               item.key === "crm" ? navigate("/crm") : navigate("/coming-soon")
             }
@@ -181,13 +196,19 @@ export const Sidebar = ({
                   )}
 
                   {wsStatus === "connected" && (
-                    <Wifi className="h-3 w-3 text-green-500" />
+                    <Wifi
+                      className={`h-3 w-3 ${activeSection === item.key ? "text-white" : "text-green-500"}`}
+                    />
                   )}
                   {wsStatus === "disconnected" && (
-                    <WifiOff className="h-3 w-3 text-red-500" />
+                    <WifiOff
+                      className={`h-3 w-3 ${activeSection === item.key ? "text-white" : "text-red-500"}`}
+                    />
                   )}
                   {wsStatus === "reconnecting" && (
-                    <RefreshCw className="h-3 w-3 text-orange-500 animate-spin" />
+                    <RefreshCw
+                      className={`h-3 w-3 animate-spin ${activeSection === item.key ? "text-white" : "text-orange-500"}`}
+                    />
                   )}
                 </div>
               ))}
@@ -206,9 +227,13 @@ export const Sidebar = ({
         {fileManagerItems.map((item) => (
           <Button
             key={item.key}
-            variant={activeSection === item.key ? "default" : "ghost"}
+            variant="ghost"
             className={`w-full ${
               isCollapsed ? "justify-center" : "justify-start"
+            } ${
+              activeSection === item.key
+                ? "bg-[#906BFF] text-white hover:bg-[#906BFF]/90"
+                : ""
             }`}
             onClick={() => {
               navigate("/");
@@ -235,6 +260,10 @@ export const Sidebar = ({
             variant="ghost"
             className={`w-full ${
               isCollapsed ? "justify-center" : "justify-start"
+            } ${
+              activeSection === item.key
+                ? "bg-[#906BFF] text-white"
+                : "hover:bg-muted/50"
             }`}
             onClick={() => navigate(`/${item.key}`)}
           >
@@ -307,11 +336,11 @@ export const Sidebar = ({
                     </AvatarFallback>
                   </Avatar>
 
-                  <div className="flex-1">
-                    <p className="font-semibold">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">
                       {user?.email?.split("@")[0] || "User"}
                     </p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-muted-foreground truncate">
                       {user?.email}
                     </p>
                   </div>

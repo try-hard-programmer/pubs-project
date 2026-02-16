@@ -97,14 +97,14 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
 
     if (!validateInput(formData.name)) {
       toast.error(
-        "Business Name contains invalid characters. Only letters, numbers, and standard punctuation (.,-&'/) are allowed."
+        "Business Name contains invalid characters. Only letters, numbers, and standard punctuation (.,-&'/) are allowed.",
       );
       return;
     }
 
     if (formData.legalName && !validateInput(formData.legalName)) {
       toast.error(
-        "Legal Name contains invalid characters. No emojis or special symbols allowed."
+        "Legal Name contains invalid characters. No emojis or special symbols allowed.",
       );
       return;
     }
@@ -138,7 +138,7 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
         error.code === "23503"
       ) {
         toast.error(
-          "Session sync error. Your account may have been deleted. Logging out..."
+          "Session sync error. Your account may have been deleted. Logging out...",
         );
         localStorage.removeItem("sb-ogiagiflmsjvuhknmihh-auth-token");
         localStorage.removeItem(STORAGE_KEY);
@@ -174,10 +174,10 @@ export const BusinessSetup = ({ onComplete, userId }: BusinessSetupProps) => {
               <img
                 src={
                   theme === "dark"
-                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-dark-2.png"
-                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/syntra-light.png"
+                    ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
+                    : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
                 }
-                alt="Syntra Logo"
+                alt="Palapa AI Logo"
                 className="h-full w-auto object-contain"
               />
             </div>
