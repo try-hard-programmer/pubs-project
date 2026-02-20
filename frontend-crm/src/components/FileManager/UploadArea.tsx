@@ -27,19 +27,19 @@ interface UploadFile {
 }
 
 export const UploadArea = ({ onClose, currentFolderId }: UploadAreaProps) => {
-  console.log("UploadArea mounted with currentFolderId:", currentFolderId);
+  // console.log("UploadArea mounted with currentFolderId:", currentFolderId);
 
   const [uploadFiles, setUploadFiles] = useState<UploadFile[]>([]);
   const { uploadFile, uploading, fetchFile } = useFiles(
     undefined,
-    currentFolderId
+    currentFolderId,
   );
   const { user } = useAuth();
 
-  console.log(
-    "UploadArea useFiles hook initialized with currentFolderId:",
-    currentFolderId
-  );
+  // console.log(
+  //   "UploadArea useFiles hook initialized with currentFolderId:",
+  //   currentFolderId,
+  // );
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const newFiles = acceptedFiles.map((file) => ({
@@ -55,112 +55,155 @@ export const UploadArea = ({ onClose, currentFolderId }: UploadAreaProps) => {
     multiple: true,
   });
 
-  // async function uploadSingleFile(file: File, email: string, file_id: string) {
-  //   const form = new FormData();
-  //   form.append("file", file);
-  //   form.append("email", email);
-  //   form.append("file_id", file_id);
-  //
-  //   return apiClient.post<any>("/documents/upload", form);
-  // }
-
-  // const handleUpload = async () => {
-  //   const pendingFiles = uploadFiles.filter((f) => f.status === "pending");
-
-  //   for (const uploadFileItem of pendingFiles) {
-  //     try {
-  //       setUploadFiles((prev) =>
-  //         prev.map((f) =>
-  //           f.file === uploadFileItem.file
-  //             ? { ...f, status: "uploading", progress: 50 }
-  //             : f
-  //         )
-  //       );
-  //       // f537d25a-03b8-47ac-be39-376ab90f24cc
-  //       const uploadSupabase = await uploadFile(uploadFileItem.file);
-  //       // panggil API upload
-  //       await uploadSingleFile(
-  //         uploadFileItem.file,
-  //         user.email,
-  //         uploadSupabase.id
-  //       );
-
-  //       setUploadFiles((prev) =>
-  //         prev.map((f) =>
-  //           f.file === uploadFileItem.file
-  //             ? { ...f, status: "success", progress: 100 }
-  //             : f
-  //         )
-  //       );
-  //     } catch (error: any) {
-  //       setUploadFiles((prev) =>
-  //         prev.map((f) =>
-  //           f.file === uploadFileItem.file
-  //             ? { ...f, status: "error", error: error.message }
-  //             : f
-  //         )
-  //       );
-  //     }
-  //   }
-
-  //   const successCount = uploadFiles.filter(
-  //     (f) => f.status === "success"
-  //   ).length;
-  //   if (successCount > 0) {
-  //     toast.success(`${successCount} file(s) uploaded successfully`);
-  //   }
-  // };
-
   const handleUpload = async () => {
-    console.log("handleUpload called with currentFolderId:", currentFolderId);
     const pendingFiles = uploadFiles.filter((f) => f.status === "pending");
-    let successCount = 0;
+    if (pendingFiles.length === 0) {
+      toast("No pending files to upload.", { duration: 2500 });
+      return;
+    }
 
-    for (const uploadFileItem of pendingFiles) {
+    // Simpan hasil per file untuk ditampilkan di toast
+    const results: Array<{
+      name: string;
+      status: "uploading" | "success" | "error";
+      message?: string;
+    }> = pendingFiles.map((f) => ({
+      name: f.file.name,
+      status: "uploading",
+    }));
+
+    const renderList = () => (
+      <div className="space-y-2">
+        <div className="text-xs text-muted-foreground">
+          {results.filter((r) => r.status !== "uploading").length}/
+          {results.length} done
+        </div>
+
+        <ul className="text-sm space-y-1">
+          {results.slice(0, 8).map((r) => (
+            <li key={r.name} className="flex items-start gap-2">
+              <span className="mt-[2px]">
+                {r.status === "success"
+                  ? "✓"
+                  : r.status === "error"
+                    ? "✗"
+                    : "…"}
+              </span>
+
+              <span className="flex-1 break-all">
+                <span className="font-medium">{r.name}</span>
+                <span className="ml-2">
+                  {r.status === "success"
+                    ? ": Success"
+                    : r.status === "error"
+                      ? `: Error — ${r.message ?? "Upload failed"}`
+                      : ": Uploading..."}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {results.length > 8 && (
+          <div className="text-xs text-muted-foreground">
+            +{results.length - 8} more...
+          </div>
+        )}
+      </div>
+    );
+
+    // 1 toast yang sama, nanti di-update terus pakai id
+    const toastId = toast.loading(
+      `Uploading ${pendingFiles.length} file(s)...`,
+      {
+        dismissible: false,
+        duration: Infinity,
+        description: renderList(),
+      },
+    ); // description bisa ReactNode [web:11][web:2]
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < pendingFiles.length; i++) {
+      const uploadFileItem = pendingFiles[i];
+
+      // update status di modal (optional, selama modal masih kebuka)
+      setUploadFiles((prev) =>
+        prev.map((f) =>
+          f.file === uploadFileItem.file
+            ? { ...f, status: "uploading", progress: 50 }
+            : f,
+        ),
+      );
+
       try {
-        console.log(
-          "Uploading file:",
-          uploadFileItem.file.name,
-          "to folder:",
-          currentFolderId
-        );
-        setUploadFiles((prev) =>
-          prev.map((f) =>
-            f.file === uploadFileItem.file
-              ? { ...f, status: "uploading", progress: 50 }
-              : f
-          )
-        );
-        // Upload ke Supabase Storage
-        const uploadSupabase = await uploadFile(uploadFileItem.file);
-        console.log("Upload result:", uploadSupabase);
+        await uploadFile(uploadFileItem.file);
+
+        // Update state modal
         setUploadFiles((prev) =>
           prev.map((f) =>
             f.file === uploadFileItem.file
               ? { ...f, status: "success", progress: 100 }
-              : f
-          )
+              : f,
+          ),
         );
+
+        // Update list toast
+        results[i] = { name: uploadFileItem.file.name, status: "success" };
         successCount++;
-      } catch (error) {
-        let msg;
+
+        toast.loading(`Uploading ${pendingFiles.length} file(s)...`, {
+          id: toastId,
+          description: renderList(),
+        }); // update toast yang sama via id [web:2]
+      } catch (error: any) {
+        let msg = "Upload failed";
         try {
-          msg = JSON.parse(error.message.replace("Error: ", "")).detail;
+          msg =
+            JSON.parse(String(error?.message ?? "").replace("Error: ", ""))
+              .detail || msg;
         } catch {
-          msg = error.message;
+          msg = error?.message || msg;
         }
+
         setUploadFiles((prev) =>
           prev.map((f) =>
             f.file === uploadFileItem.file
               ? { ...f, status: "error", error: msg }
-              : f
-          )
+              : f,
+          ),
         );
+
+        results[i] = {
+          name: uploadFileItem.file.name,
+          status: "error",
+          message: msg,
+        };
+        failCount++;
+
+        toast.loading(`Uploading ${pendingFiles.length} file(s)...`, {
+          id: toastId,
+          description: renderList(),
+        }); // update via id [web:2]
       }
     }
 
-    if (successCount > 0) {
-      toast.success(`${successCount} file(s) uploaded successfully`);
+    // Akhiri: replace loading -> success/error biar spinner hilang
+    if (failCount === 0) {
+      toast.success(`All files uploaded (${successCount}/${results.length}).`, {
+        id: toastId,
+        description: renderList(),
+      }); // replace by id [web:2]
+    } else {
+      toast.error(
+        `Upload finished: ${successCount} success, ${failCount} failed.`,
+        {
+          id: toastId,
+          description: renderList(),
+          duration: 8000,
+        },
+      ); // replace by id [web:2]
     }
   };
 
