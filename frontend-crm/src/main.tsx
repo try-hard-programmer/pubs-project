@@ -32,6 +32,7 @@ import NotFound from "./pages/NotFound";
 import { ResetPassword } from "./pages/ResetPassword";
 import { PasswordRecoveryHandler } from "./components/forget-password/PasswordRecoveryHandler";
 import { RecoveryHashGuard } from "./components/forget-password/RecoveryHashGuard";
+import { UploadProvider } from "@/contexts/UploadContext";
 
 const queryClient = new QueryClient();
 
@@ -61,124 +62,126 @@ createRoot(document.getElementById("root")!).render(
         <AuthProvider>
           <RoleProvider>
             <OrganizationProvider>
-              <NotificationPreferencesProvider>
-                <WebSocketProvider>
-                  <RecoveryHashGuard>
-                    <HashRouter>
-                      <PasswordRecoveryHandler />
-                      <GlobalChatNotifications />
-                      <Routes>
-                        <Route
-                          path="/"
-                          element={
-                            <ProtectedRoute>
-                              <Index />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/folder/:folderId"
-                          element={
-                            <ProtectedRoute>
-                              <Index />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route path="/auth" element={<AuthPage />} />
-                        <Route
-                          path="/auth/reset-password"
-                          element={<ResetPassword />}
-                        />
-                        <Route
-                          path="/dashboard"
-                          element={
-                            <ProtectedRoute>
-                              <Dashboard />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/crm"
-                          element={
-                            <ProtectedRoute>
-                              <CRM />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/learning-center"
-                          element={
-                            <ProtectedRoute>
-                              <LearningCenter />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/usage-billing"
-                          element={
-                            <ProtectedRoute>
-                              <UsageBilling />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/organization"
-                          element={
-                            <ProtectedRoute>
-                              <OrganizationSettings />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="/user-management"
-                          element={
-                            <AdminRoute>
-                              <UserManagement />
-                            </AdminRoute>
-                          }
-                        />
-                        <Route
-                          path="/groups"
-                          element={
-                            <AdminRoute>
-                              <GroupManagement />
-                            </AdminRoute>
-                          }
-                        />
-                        <Route
-                          path="/groups/:groupId"
-                          element={
-                            <AdminRoute>
-                              <GroupDetail />
-                            </AdminRoute>
-                          }
-                        />
-                        <Route
-                          path="/accept-invitation"
-                          element={<AcceptInvitation />}
-                        />
-                        <Route
-                          path="/coming-soon"
-                          element={
-                            <ProtectedRoute>
-                              <ComingSoon />
-                            </ProtectedRoute>
-                          }
-                        />
-                        <Route
-                          path="*"
-                          element={
-                            <ProtectedRoute>
-                              <NotFound />
-                            </ProtectedRoute>
-                          }
-                        />
-                      </Routes>
-                      <Toaster />
-                    </HashRouter>
-                  </RecoveryHashGuard>
-                </WebSocketProvider>
-              </NotificationPreferencesProvider>
+              <UploadProvider>
+                <NotificationPreferencesProvider>
+                  <WebSocketProvider>
+                    <RecoveryHashGuard>
+                      <HashRouter>
+                        <PasswordRecoveryHandler />
+                        <GlobalChatNotifications />
+                        <Routes>
+                          <Route
+                            path="/"
+                            element={
+                              <ProtectedRoute>
+                                <Index />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/folder/:folderId"
+                            element={
+                              <ProtectedRoute>
+                                <Index />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route path="/auth" element={<AuthPage />} />
+                          <Route
+                            path="/auth/reset-password"
+                            element={<ResetPassword />}
+                          />
+                          <Route
+                            path="/dashboard"
+                            element={
+                              <ProtectedRoute>
+                                <Dashboard />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/crm"
+                            element={
+                              <ProtectedRoute>
+                                <CRM />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/learning-center"
+                            element={
+                              <ProtectedRoute>
+                                <LearningCenter />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/usage-billing"
+                            element={
+                              <ProtectedRoute>
+                                <UsageBilling />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/organization"
+                            element={
+                              <ProtectedRoute>
+                                <OrganizationSettings />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="/user-management"
+                            element={
+                              <AdminRoute>
+                                <UserManagement />
+                              </AdminRoute>
+                            }
+                          />
+                          <Route
+                            path="/groups"
+                            element={
+                              <AdminRoute>
+                                <GroupManagement />
+                              </AdminRoute>
+                            }
+                          />
+                          <Route
+                            path="/groups/:groupId"
+                            element={
+                              <AdminRoute>
+                                <GroupDetail />
+                              </AdminRoute>
+                            }
+                          />
+                          <Route
+                            path="/accept-invitation"
+                            element={<AcceptInvitation />}
+                          />
+                          <Route
+                            path="/coming-soon"
+                            element={
+                              <ProtectedRoute>
+                                <ComingSoon />
+                              </ProtectedRoute>
+                            }
+                          />
+                          <Route
+                            path="*"
+                            element={
+                              <ProtectedRoute>
+                                <NotFound />
+                              </ProtectedRoute>
+                            }
+                          />
+                        </Routes>
+                        <Toaster />
+                      </HashRouter>
+                    </RecoveryHashGuard>
+                  </WebSocketProvider>
+                </NotificationPreferencesProvider>
+              </UploadProvider>
             </OrganizationProvider>
           </RoleProvider>
         </AuthProvider>
@@ -189,5 +192,5 @@ createRoot(document.getElementById("root")!).render(
         buttonPosition="bottom-right"
       />
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 );

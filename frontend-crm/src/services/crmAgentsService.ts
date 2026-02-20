@@ -279,7 +279,7 @@ function formatRelativeTime(isoTimestamp: string): string {
  * @returns Agent data for frontend (camelCase)
  */
 export function transformAgentToFrontend(
-  backendAgent: AgentBackend
+  backendAgent: AgentBackend,
 ): AgentFrontend {
   return {
     id: backendAgent.id,
@@ -304,7 +304,7 @@ export function transformAgentToCreateRequest(
   frontendData: Omit<
     AgentFrontend,
     "id" | "assignedChats" | "resolvedToday" | "avgResponseTime" | "lastActive"
-  >
+  >,
 ): CreateAgentRequest {
   return {
     name: frontendData.name,
@@ -327,7 +327,7 @@ export function transformAgentToCreateRequest(
  */
 export async function getAgents(
   statusFilter?: AgentStatus,
-  search?: string
+  search?: string,
 ): Promise<AgentFrontend[]> {
   try {
     // Build query params
@@ -355,13 +355,13 @@ export async function getAgents(
 export async function getAgentById(agentId: string): Promise<AgentFrontend> {
   try {
     const backendAgent = await apiClient.get<AgentBackend>(
-      `/crm/agents/${agentId}`
+      `/crm/agents/${agentId}`,
     );
     return transformAgentToFrontend(backendAgent);
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error fetching agent ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to fetch agent details. Please try again.");
   }
@@ -376,13 +376,13 @@ export async function createAgent(
   agentData: Omit<
     AgentFrontend,
     "id" | "assignedChats" | "resolvedToday" | "avgResponseTime" | "lastActive"
-  >
+  >,
 ): Promise<AgentFrontend> {
   try {
     const createRequest = transformAgentToCreateRequest(agentData);
     const backendAgent = await apiClient.post<AgentBackend>(
       "/crm/agents/",
-      createRequest
+      createRequest,
     );
     return transformAgentToFrontend(backendAgent);
   } catch (error) {
@@ -408,7 +408,7 @@ export async function updateAgent(
       | "avgResponseTime"
       | "lastActive"
     >
-  >
+  >,
 ): Promise<AgentFrontend> {
   try {
     const updateRequest: UpdateAgentRequest = {
@@ -421,13 +421,13 @@ export async function updateAgent(
 
     const backendAgent = await apiClient.put<AgentBackend>(
       `/crm/agents/${agentId}`,
-      updateRequest
+      updateRequest,
     );
     return transformAgentToFrontend(backendAgent);
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error updating agent ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to update agent. Please try again.");
   }
@@ -443,7 +443,7 @@ export async function deleteAgent(agentId: string): Promise<void> {
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error deleting agent ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to delete agent. Please try again.");
   }
@@ -457,19 +457,19 @@ export async function deleteAgent(agentId: string): Promise<void> {
  */
 export async function updateAgentStatus(
   agentId: string,
-  status: AgentStatus
+  status: AgentStatus,
 ): Promise<AgentFrontend> {
   try {
     const statusRequest: UpdateAgentStatusRequest = { status };
     const backendAgent = await apiClient.patch<AgentBackend>(
       `/crm/agents/${agentId}/status`,
-      statusRequest
+      statusRequest,
     );
     return transformAgentToFrontend(backendAgent);
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error updating agent status ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to update agent status. Please try again.");
   }
@@ -481,7 +481,7 @@ export async function updateAgentStatus(
  * @returns Frontend formatted settings
  */
 export function transformSettingsToFrontend(
-  backendSettings: AgentSettingsBackend
+  backendSettings: AgentSettingsBackend,
 ): AgentSettingsFrontend {
   const dayNames = [
     "sunday",
@@ -516,7 +516,7 @@ export function transformSettingsToFrontend(
           enabled: wh.enabled,
           start: wh.start,
           end: wh.end,
-        })
+        }),
       ),
     },
     advanced: {
@@ -554,7 +554,7 @@ export function transformSettingsToFrontend(
  * @returns Backend formatted settings (only configs, no id/timestamps)
  */
 export function transformSettingsToBackend(
-  frontendSettings: AgentSettingsFrontend
+  frontendSettings: AgentSettingsFrontend,
 ): Omit<AgentSettingsBackend, "id" | "agent_id" | "created_at" | "updated_at"> {
   // Mapping from English day names to dayIndex (0=Monday, 6=Sunday)
   const dayNameToIndex: Record<string, number> = {
@@ -640,17 +640,17 @@ export function transformSettingsToBackend(
  * @returns Agent settings object in frontend format
  */
 export async function getAgentSettings(
-  agentId: string
+  agentId: string,
 ): Promise<AgentSettingsFrontend> {
   try {
     const backendSettings = await apiClient.get<AgentSettingsBackend>(
-      `/crm/agents/${agentId}/settings`
+      `/crm/agents/${agentId}/settings`,
     );
     return transformSettingsToFrontend(backendSettings);
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error fetching agent settings ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to fetch agent settings. Please try again.");
   }
@@ -664,19 +664,19 @@ export async function getAgentSettings(
  */
 export async function updateAgentSettings(
   agentId: string,
-  settings: AgentSettingsFrontend
+  settings: AgentSettingsFrontend,
 ): Promise<AgentSettingsFrontend> {
   try {
     const backendPayload = transformSettingsToBackend(settings);
     const updatedSettings = await apiClient.put<AgentSettingsBackend>(
       `/crm/agents/${agentId}/settings`,
-      backendPayload
+      backendPayload,
     );
     return transformSettingsToFrontend(updatedSettings);
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error updating agent settings ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to update agent settings. Please try again.");
   }
@@ -688,17 +688,17 @@ export async function updateAgentSettings(
  * @returns Array of knowledge documents
  */
 export async function getKnowledgeDocuments(
-  agentId: string
+  agentId: string,
 ): Promise<KnowledgeDocument[]> {
   try {
     const documents = await apiClient.get<KnowledgeDocument[]>(
-      `/crm/agents/${agentId}/knowledge-documents`
+      `/crm/agents/${agentId}/knowledge-documents`,
     );
     return documents;
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error fetching knowledge documents ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to fetch knowledge documents. Please try again.");
   }
@@ -712,7 +712,7 @@ export async function getKnowledgeDocuments(
  */
 export async function uploadKnowledgeDocument(
   agentId: string,
-  file: File
+  file: File,
 ): Promise<KnowledgeDocument> {
   try {
     const formData = new FormData();
@@ -720,13 +720,13 @@ export async function uploadKnowledgeDocument(
 
     const document = await apiClient.post<KnowledgeDocument>(
       `/crm/agents/${agentId}/knowledge-documents`,
-      formData
+      formData,
     );
     return document;
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error uploading knowledge document ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to upload knowledge document. Please try again.");
   }
@@ -739,16 +739,16 @@ export async function uploadKnowledgeDocument(
  */
 export async function deleteKnowledgeDocument(
   agentId: string,
-  documentId: string
+  documentId: string,
 ): Promise<void> {
   try {
     await apiClient.delete(
-      `/crm/agents/${agentId}/knowledge-documents/${documentId}`
+      `/crm/agents/${agentId}/knowledge-documents/${documentId}`,
     );
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error deleting knowledge document ${documentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to delete knowledge document. Please try again.");
   }
@@ -760,17 +760,17 @@ export async function deleteKnowledgeDocument(
  * @returns Array of agent integrations
  */
 export async function getAgentIntegrations(
-  agentId: string
+  agentId: string,
 ): Promise<AgentIntegration[]> {
   try {
     const integrations = await apiClient.get<AgentIntegration[]>(
-      `/crm/agents/${agentId}/integrations`
+      `/crm/agents/${agentId}/integrations`,
     );
     return integrations;
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error fetching agent integrations ${agentId}:`,
-      error
+      error,
     );
     throw new Error("Failed to fetch agent integrations. Please try again.");
   }
@@ -790,19 +790,53 @@ export async function updateAgentIntegration(
     enabled?: boolean;
     config?: Record<string, any>;
     status?: IntegrationStatus;
-  }
+  },
 ): Promise<AgentIntegration> {
   try {
     const integration = await apiClient.put<AgentIntegration>(
       `/crm/agents/${agentId}/integrations/${channel}`,
-      config
+      config,
     );
     return integration;
   } catch (error) {
     console.error(
       `[CRM Agents Service] Error updating agent integration ${agentId}/${channel}:`,
-      error
+      error,
     );
     throw new Error("Failed to update agent integration. Please try again.");
+  }
+}
+
+/**
+ * Download a knowledge document
+ */
+export async function downloadKnowledgeDocument(
+  agentId: string,
+  documentId: string,
+  filename: string,
+): Promise<void> {
+  try {
+    // 1. Get the file as a Blob using the new apiClient method
+    // Note: This endpoint must be implemented by Backend as discussed
+    const blob = await apiClient.getBlob(
+      `/crm/agents/${agentId}/knowledge-documents/${documentId}/download`,
+    );
+
+    // 2. Create a download link
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+
+    // 3. Trigger download
+    document.body.appendChild(link);
+    link.click();
+
+    // 4. Cleanup
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error(`[CRM Agents Service] Error downloading document:`, error);
+    throw new Error("Failed to download document.");
   }
 }

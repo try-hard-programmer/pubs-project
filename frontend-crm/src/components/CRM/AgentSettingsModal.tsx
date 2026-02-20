@@ -41,6 +41,8 @@ import {
   X,
   Ticket,
   Loader2,
+  CheckCircle,
+  AlertCircle,
 } from "lucide-react";
 import { WhatsAppIntegration } from "./integrations/WhatsAppIntegration";
 import { TelegramIntegration } from "./integrations/TelegramIntegration";
@@ -52,6 +54,8 @@ import type {
   AgentSettingsFrontend,
   KnowledgeDocument as KnowledgeDocumentAPI,
 } from "@/services/crmAgentsService";
+import { useUpload } from "@/contexts/UploadContext";
+import { Progress } from "@/components/ui/progress";
 
 interface Agent {
   id: string;
@@ -110,6 +114,8 @@ interface KnowledgeDocument {
   type: string;
   size: string;
   uploadedAt: string;
+  status: "pending" | "completed" | "failed"; // <-- NEW
+  errorDetail?: string; // <-- NEW
 }
 
 interface WorkingHours {
@@ -153,10 +159,24 @@ export const AgentSettingsModal = ({
   agent,
   onSave,
 }: AgentSettingsModalProps) => {
+  // const [loading, setLoading] = useState(true);
+  // const [saving, setSaving] = useState(false);
+  // const [uploading, setUploading] = useState(false);
+  // const saveInProgressRef = useRef(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const saveInProgressRef = useRef(false);
+
+  // Connect to Global Upload Context
+  const { startUpload, uploads } = useUpload();
+
+  // Filter uploads to show only THIS agent's files
+  const activeUploads = uploads.filter((u) => u.agentId === agent?.id);
+
+  // State for persona config
+  const [personaMode, setPersonaMode] = useState<"basic" | "advanced">("basic");
+
   const [settings, setSettings] = useState<AgentSettings>({
     persona: {
       name: "Customer Support Assistant",
@@ -199,6 +219,45 @@ export const AgentSettingsModal = ({
       categories: [],
     },
   });
+
+  // NEW: Polling Mechanism for Pending Documents
+  useEffect(() => {
+    // Check if there are any documents currently "pending"
+    const hasPendingDocs = settings.knowledgeBase.some(
+      (doc) => doc.status === "pending",
+    );
+
+    // If no pending docs, or modal is closed, do nothing
+    if (!hasPendingDocs || !open || !agent?.id) return;
+
+    // Set up the 3-second polling interval
+    const interval = setInterval(async () => {
+      try {
+        const docs = await crmAgentsService.getKnowledgeDocuments(agent.id);
+
+        const formattedDocs = (docs as any[]).map((doc) => ({
+          id: doc.id,
+          name: doc.name,
+          type: doc.file_type,
+          size: `${doc.file_size_kb} KB`,
+          uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
+          status: doc.metadata?.status || "completed",
+          errorDetail: doc.metadata?.error_detail,
+        }));
+
+        // Update state with fresh statuses
+        setSettings((prev) => ({
+          ...prev,
+          knowledgeBase: formattedDocs,
+        }));
+      } catch (error) {
+        console.error("Failed to poll document status:", error);
+      }
+    }, 3000); // 3 seconds
+
+    // Cleanup interval on unmount or when status changes
+    return () => clearInterval(interval);
+  }, [settings.knowledgeBase, open, agent?.id]);
 
   // Fetch agent settings from API when modal opens
   useEffect(() => {
@@ -304,19 +363,28 @@ export const AgentSettingsModal = ({
             workingHours = [];
           }
 
+          // Determine Persona Mode based on data
+          if (
+            apiSettings.persona.customInstructions &&
+            apiSettings.persona.customInstructions.length > 10
+          ) {
+            setPersonaMode("advanced");
+          } else {
+            setPersonaMode("basic");
+          }
+
           // Transform API settings to local AgentSettings format
           setSettings({
             persona: apiSettings.persona,
-            knowledgeBase: (apiDocuments as KnowledgeDocumentAPI[]).map(
-              (doc) => ({
-                id: doc.id,
-                name: doc.name,
-                // service returns snake_case fields
-                type: doc.file_type,
-                size: `${doc.file_size_kb} KB`,
-                uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
-              }),
-            ),
+            knowledgeBase: (apiDocuments as any[]).map((doc) => ({
+              id: doc.id,
+              name: doc.name,
+              type: doc.file_type,
+              size: `${doc.file_size_kb} KB`,
+              uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
+              status: doc.metadata?.status || "completed",
+              errorDetail: doc.metadata?.error_detail,
+            })),
             schedule: {
               enabled: apiSettings.schedule.enabled,
               timezone: apiSettings.schedule.timezone,
@@ -400,51 +468,39 @@ export const AgentSettingsModal = ({
     const files = event.target.files;
     if (!files || files.length === 0) return;
 
-    setUploading(true);
-    try {
-      const uploadPromises = Array.from(files).map(async (file) => {
-        // Validate file size (max 10MB)
-        if (file.size > 10 * 1024 * 1024) {
-          toast.error(`File ${file.name} terlalu besar (max 10MB)`);
-          return null;
-        }
-
-        // Upload to API
-        const uploadedDoc = (await crmAgentsService.uploadKnowledgeDocument(
-          agent.id,
-          file,
-        )) as KnowledgeDocumentAPI;
-
-        // Transform to local format (service returns snake_case)
-        return {
-          id: uploadedDoc.id,
-          name: uploadedDoc.name,
-          type: uploadedDoc.file_type,
-          size: `${uploadedDoc.file_size_kb} KB`,
-          uploadedAt: new Date(uploadedDoc.uploaded_at).toLocaleString(),
-        };
-      });
-
-      const results = await Promise.all(uploadPromises);
-      const successfulUploads = results.filter(
-        (doc) => doc !== null,
-      ) as KnowledgeDocument[];
-
-      if (successfulUploads.length > 0) {
-        setSettings((prev) => ({
-          ...prev,
-          knowledgeBase: [...prev.knowledgeBase, ...successfulUploads],
-        }));
-        toast.success(`${successfulUploads.length} dokumen berhasil diupload`);
+    Array.from(files).forEach((file) => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`File ${file.name} terlalu besar (max 10MB)`);
+        return;
       }
-    } catch (error) {
-      console.error("Failed to upload documents:", error);
-      toast.error("Gagal mengupload dokumen");
-    } finally {
-      setUploading(false);
-    }
 
-    // Reset file input
+      startUpload(agent.id, file, () => {
+        if (open) {
+          crmAgentsService
+            .getKnowledgeDocuments(agent.id)
+            .then((docs) => {
+              const formattedDocs: KnowledgeDocument[] = (docs as any[]).map(
+                (doc) => ({
+                  id: doc.id,
+                  name: doc.name,
+                  type: doc.file_type,
+                  size: `${doc.file_size_kb} KB`,
+                  uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
+                  status: doc.metadata?.status || "completed",
+                  errorDetail: doc.metadata?.error_detail,
+                }),
+              );
+
+              setSettings((prev) => ({
+                ...prev,
+                knowledgeBase: formattedDocs,
+              }));
+            })
+            .catch((err) => console.error("Failed to refresh list", err));
+        }
+      });
+    });
+
     event.target.value = "";
   };
 
@@ -459,6 +515,21 @@ export const AgentSettingsModal = ({
     } catch (error) {
       console.error("Failed to delete document:", error);
       toast.error("Gagal menghapus dokumen");
+    }
+  };
+
+  const handleDownloadDocument = async (docId: string, docName: string) => {
+    try {
+      toast.info("Downloading document...");
+      await crmAgentsService.downloadKnowledgeDocument(
+        agent.id,
+        docId,
+        docName,
+      );
+      toast.success("Download started");
+    } catch (error) {
+      console.error("Failed to download document:", error);
+      toast.error("Gagal mengunduh dokumen");
     }
   };
 
@@ -680,12 +751,43 @@ export const AgentSettingsModal = ({
                         Atur kepribadian dan gaya komunikasi agent AI
                       </CardDescription>
                     </CardHeader>
+
+                    {/* 👇 INSERT THE CODE HERE 👇 */}
+                    <CardContent className="space-y-4">
+                      {/* NEW: Configuration Mode Selection */}
+                      <div className="space-y-2">
+                        <Label>Metode Konfigurasi</Label>
+                        <Select
+                          value={personaMode}
+                          onValueChange={(value: "basic" | "advanced") =>
+                            setPersonaMode(value)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="basic">
+                              Basic (Template & Tone)
+                            </SelectItem>
+                            <SelectItem value="advanced">
+                              Advanced (Custom Instructions)
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="border-t my-4" />
+                    </CardContent>
+                    {/* 👆 END OF INSERTED CODE 👆 */}
+
                     <CardContent className="space-y-4">
                       {/* Persona Name */}
                       <div className="space-y-2">
                         <Label htmlFor="personaName">Nama Persona</Label>
                         <Input
                           id="personaName"
+                          disabled={personaMode === "advanced"}
                           placeholder="e.g., Customer Support Assistant"
                           value={settings.persona.name}
                           onChange={(e) =>
@@ -705,6 +807,7 @@ export const AgentSettingsModal = ({
                         <Label htmlFor="language">Bahasa</Label>
                         <Select
                           value={settings.persona.language}
+                          disabled={personaMode === "advanced"}
                           onValueChange={(value) =>
                             setSettings((prev) => ({
                               ...prev,
@@ -728,6 +831,7 @@ export const AgentSettingsModal = ({
                         <Label htmlFor="tone">Tone</Label>
                         <Select
                           value={settings.persona.tone}
+                          disabled={personaMode === "advanced"}
                           onValueChange={(value) =>
                             setSettings((prev) => ({
                               ...prev,
@@ -760,7 +864,12 @@ export const AgentSettingsModal = ({
                         </Label>
                         <Textarea
                           id="instructions"
-                          placeholder="Masukkan instruksi khusus untuk agent..."
+                          disabled={personaMode === "basic"}
+                          placeholder={
+                            personaMode === "basic"
+                              ? "Beralih ke Advanced Mode untuk mengedit instruksi manual."
+                              : "Masukkan instruksi khusus untuk agent..."
+                          }
                           rows={8}
                           value={settings.persona.customInstructions}
                           onChange={(e) =>
@@ -816,50 +925,58 @@ export const AgentSettingsModal = ({
                           onClick={() =>
                             document.getElementById("fileUpload")?.click()
                           }
-                          disabled={uploading}
                         >
-                          {uploading ? (
-                            <>
-                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                              Uploading...
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-4 w-4 mr-2" />
-                              Choose Files
-                            </>
-                          )}
+                          <Plus className="h-4 w-4 mr-2" />
+                          Choose Files
                         </Button>
                       </div>
 
-                      {/* Upload Skeleton - shown during upload */}
-                      {uploading && (
-                        <div className="space-y-2">
-                          <Label className="flex items-center gap-2">
-                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                            Uploading documents...
-                          </Label>
-                          <div className="space-y-2">
-                            {[1, 2].map((index) => (
-                              <Card key={index} className="animate-pulse">
-                                <CardContent className="p-4">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3 flex-1">
-                                      <div className="h-8 w-8 bg-muted rounded" />
-                                      <div className="flex-1 space-y-2">
-                                        <div className="h-4 bg-muted rounded w-3/4" />
-                                        <div className="h-3 bg-muted rounded w-1/2" />
-                                      </div>
-                                    </div>
-                                    <div className="flex gap-2">
-                                      <div className="h-8 w-8 bg-muted rounded" />
-                                      <div className="h-8 w-8 bg-muted rounded" />
-                                    </div>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            ))}
-                          </div>
+                      {/* NEW: Active Uploads List (Global Context) */}
+                      {activeUploads.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          <Label>Uploading...</Label>
+                          {activeUploads.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30"
+                            >
+                              <div className="w-8 h-8 rounded bg-background flex items-center justify-center flex-shrink-0">
+                                {item.status === "success" ? (
+                                  <CheckCircle className="h-5 w-5 text-green-500" />
+                                ) : item.status === "error" ? (
+                                  <AlertCircle className="h-5 w-5 text-red-500" />
+                                ) : (
+                                  <FileText className="h-5 w-5 text-blue-500" />
+                                )}
+                              </div>
+
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="flex justify-between text-sm">
+                                  <span className="font-medium truncate">
+                                    {item.file.name}
+                                  </span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {item.status === "uploading"
+                                      ? `${item.progress.toFixed(0)}%`
+                                      : item.status}
+                                  </span>
+                                </div>
+
+                                {item.status === "uploading" && (
+                                  <Progress
+                                    value={item.progress}
+                                    className="h-1.5"
+                                  />
+                                )}
+
+                                {item.error && (
+                                  <p className="text-xs text-red-500">
+                                    {item.error}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       )}
 
@@ -876,17 +993,56 @@ export const AgentSettingsModal = ({
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                       <FileText className="h-8 w-8 text-primary" />
-                                      <div>
-                                        <p className="font-medium text-sm">
-                                          {doc.name}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
+                                      <div className="flex-1">
+                                        <div className="flex items-center gap-2">
+                                          <p className="font-medium text-sm truncate max-w-[250px]">
+                                            {doc.name}
+                                          </p>
+                                          {/* Status Badges */}
+                                          {doc.status === "pending" && (
+                                            <Badge
+                                              variant="outline"
+                                              className="bg-yellow-50 text-yellow-700 border-yellow-200 text-[10px] h-5 px-1.5"
+                                            >
+                                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />{" "}
+                                              Processing
+                                            </Badge>
+                                          )}
+                                          {doc.status === "failed" && (
+                                            <Badge
+                                              variant="destructive"
+                                              className="text-[10px] h-5 px-1.5"
+                                            >
+                                              Failed
+                                            </Badge>
+                                          )}
+                                        </div>
+
+                                        <p className="text-xs text-muted-foreground mt-0.5">
                                           {doc.size} • {doc.uploadedAt}
                                         </p>
+
+                                        {/* Error Message Display */}
+                                        {doc.status === "failed" &&
+                                          doc.errorDetail && (
+                                            <p className="text-xs text-red-500 mt-1 bg-red-50 p-1.5 rounded border border-red-100">
+                                              {doc.errorDetail}
+                                            </p>
+                                          )}
                                       </div>
                                     </div>
                                     <div className="flex gap-2">
-                                      <Button variant="ghost" size="sm">
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={doc.status !== "completed"}
+                                        onClick={() =>
+                                          handleDownloadDocument(
+                                            doc.id,
+                                            doc.name,
+                                          )
+                                        }
+                                      >
                                         <Download className="h-4 w-4" />
                                       </Button>
                                       <Button

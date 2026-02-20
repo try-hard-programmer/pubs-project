@@ -28,7 +28,7 @@ class ApiClient {
    */
   private async authenticatedFetch(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
   ): Promise<Response> {
     const token = await this.getAuthToken();
 
@@ -81,7 +81,7 @@ class ApiClient {
   async post<T>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
@@ -122,7 +122,7 @@ class ApiClient {
   async delete<T>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
@@ -160,7 +160,7 @@ class ApiClient {
   async put<T>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
@@ -200,7 +200,7 @@ class ApiClient {
   async patch<T>(
     endpoint: string,
     body?: any,
-    options?: RequestInit
+    options?: RequestInit,
   ): Promise<T> {
     const requestOptions: RequestInit = {
       ...options,
@@ -232,6 +232,23 @@ class ApiClient {
     }
 
     return { status: "ok" } as T;
+  }
+
+  /**
+   * GET request returning a Blob (for file downloads)
+   */
+  async getBlob(endpoint: string, options?: RequestInit): Promise<Blob> {
+    const response = await this.authenticatedFetch(endpoint, {
+      ...options,
+      method: "GET",
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || `GET Blob request failed (${response.status})`);
+    }
+
+    return response.blob();
   }
 }
 

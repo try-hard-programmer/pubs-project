@@ -70,7 +70,7 @@ export const Sidebar = ({
 }: SidebarProps) => {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   // web socket CRM notification support
   const { unreadChatsCount, wsStatus, reconnectAttempts } = useWebSocket();
@@ -109,7 +109,7 @@ export const Sidebar = ({
             <div className="w-8 h-8 flex items-center justify-center">
               <img
                 src={
-                  theme === "dark"
+                  resolvedTheme === "dark"
                     ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/favicon.webp"
                     : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/favicon.webp"
                 }
@@ -120,7 +120,7 @@ export const Sidebar = ({
           ) : (
             <img
               src={
-                theme === "dark"
+                resolvedTheme === "dark"
                   ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
                   : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
               }

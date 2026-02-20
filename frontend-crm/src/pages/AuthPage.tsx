@@ -42,7 +42,7 @@ export const AuthPage = () => {
   const { user, loading: authLoading } = useAuth();
   const { currentOrganization, loading: orgLoading } = useOrganization();
   const navigate = useNavigate();
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   // ✅ OPTIMIZATION: Derived State
   const fullNameValid =
@@ -295,7 +295,7 @@ export const AuthPage = () => {
             <div className="w-full max-w-[180px] h-16 flex items-center justify-center">
               <img
                 src={
-                  theme === "dark"
+                  resolvedTheme === "dark"
                     ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
                     : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
                 }
