@@ -46,6 +46,7 @@ interface Agent {
   name: string;
   email: string;
   status: "active" | "inactive" | "busy";
+  activeIntegrations?: string[];
 }
 
 interface NewChatModalProps {
@@ -84,7 +85,7 @@ export const NewChatModal = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(
-    null
+    null,
   );
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -233,6 +234,13 @@ export const NewChatModal = ({
   };
 
   const handleContactChange = (value: string) => {
+    // Allow clearing the input completely
+    if (value === "") {
+      setManualContact("");
+      setErrors((prev) => ({ ...prev, contact: "" }));
+      return;
+    }
+
     if (hasEmoji(value)) {
       setErrors((prev) => ({
         ...prev,
@@ -240,7 +248,94 @@ export const NewChatModal = ({
       }));
       return;
     }
-    setManualContact(value);
+
+    if (channel === "whatsapp") {
+      // 1. Auto-remove spaces, plus (+), dash (-), and parentheses
+      const cleanedValue = value.replace(/[\s+\-().]/g, "");
+
+      // 2. Block non-numeric characters entirely
+      if (/[^0-9]/.test(cleanedValue)) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: "Hanya angka yang diperbolehkan untuk nomor WhatsApp",
+        }));
+        return;
+      }
+
+      // 3. Block leading '0' — must use country code
+      if (cleanedValue.startsWith("0")) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: "Gunakan kode negara (contoh: 628...), bukan '0'",
+        }));
+        return;
+      }
+
+      // 4. Must start with a valid country code (1–3 digits, non-zero start)
+      if (cleanedValue.length > 0 && !/^[1-9]/.test(cleanedValue)) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: "Nomor harus dimulai dengan kode negara yang valid",
+        }));
+        return;
+      }
+
+      // 5. Enforce minimum length (7 digits = shortest valid intl number)
+      if (cleanedValue.length > 0 && cleanedValue.length < 7) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: "Nomor WhatsApp terlalu pendek (minimal 7 digit)",
+        }));
+        // Still set the value so user can keep typing
+        setManualContact(cleanedValue);
+        return;
+      }
+
+      // 6. Enforce maximum length (15 digits per E.164 standard)
+      if (cleanedValue.length > 15) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: "Nomor WhatsApp terlalu panjang (maksimal 15 digit)",
+        }));
+        return; // Block input beyond 15 digits
+      }
+
+      // 7. Detect obviously repeated/fake numbers (e.g. 111111111, 000000000)
+      if (/^(\d)\1{6,}$/.test(cleanedValue)) {
+        setErrors((prev) => ({
+          ...prev,
+          contact: "Nomor WhatsApp tidak valid",
+        }));
+        return;
+      }
+
+      setManualContact(cleanedValue);
+      setErrors((prev) => ({ ...prev, contact: "" }));
+      return;
+    }
+
+    // --- Non-WhatsApp channels (email, etc.) ---
+    const trimmed = value.trimStart(); // prevent leading spaces
+
+    // 1. Block consecutive spaces
+    if (/\s{2,}/.test(trimmed)) {
+      setErrors((prev) => ({
+        ...prev,
+        contact: "Kontak tidak boleh mengandung spasi berlebihan",
+      }));
+      return;
+    }
+
+    // 2. Max length guard (adjust as needed)
+    if (trimmed.length > 100) {
+      setErrors((prev) => ({
+        ...prev,
+        contact: "Kontak terlalu panjang (maksimal 100 karakter)",
+      }));
+      return;
+    }
+
+    setManualContact(trimmed);
     setErrors((prev) => ({ ...prev, contact: "" }));
   };
 
@@ -261,11 +356,18 @@ export const NewChatModal = ({
         newErrors.customerName = "Nama mengandung karakter tidak valid";
       }
 
-      // Contact Validation
       if (!manualContact.trim()) {
         newErrors.contact = "Kontak wajib diisi";
       } else if (hasEmoji(manualContact)) {
         newErrors.contact = "Kontak tidak boleh mengandung emoticon";
+      } else if (channel === "whatsapp") {
+        // Since we auto-cleaned it in handleContactChange, just enforce the '0' rule here
+        if (manualContact.startsWith("0")) {
+          newErrors.contact =
+            "Nomor WhatsApp harus menggunakan kode negara (contoh: 628...)";
+        } else if (/[^0-9]/.test(manualContact)) {
+          newErrors.contact = "Nomor WhatsApp hanya boleh berisi angka";
+        }
       }
     } else {
       if (!selectedCustomer) {
@@ -371,6 +473,7 @@ export const NewChatModal = ({
                 setChannel(v as any);
                 setSelectedCustomer(null);
                 setErrors({});
+                setIntegrationAgentId("unassigned");
                 if (v === "telegram") setActiveTab("existing");
               }}
               disabled={isCreating}
@@ -559,7 +662,11 @@ export const NewChatModal = ({
                   Tidak assign agent integration
                 </SelectItem>
                 {agents
-                  .filter((agent) => agent.status === "active")
+                  .filter(
+                    (agent) =>
+                      agent.status === "active" &&
+                      agent.activeIntegrations?.includes(channel),
+                  )
                   .map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agent.name}
@@ -567,6 +674,16 @@ export const NewChatModal = ({
                   ))}
               </SelectContent>
             </Select>
+            {agents.filter(
+              (a) =>
+                a.status === "active" &&
+                a.activeIntegrations?.includes(channel),
+            ).length === 0 && (
+              <p className="text-xs text-amber-600">
+                Tidak ada agent aktif yang memiliki integrasi{" "}
+                {selectedChannel?.label}.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">

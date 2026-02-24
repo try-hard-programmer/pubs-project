@@ -166,6 +166,7 @@ interface Agent {
   resolvedToday: number;
   avgResponseTime: string;
   lastActive: string;
+  activeIntegrations: string[];
 }
 
 /**

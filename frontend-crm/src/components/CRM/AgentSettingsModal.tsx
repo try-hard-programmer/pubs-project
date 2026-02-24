@@ -41,8 +41,6 @@ import {
   X,
   Ticket,
   Loader2,
-  CheckCircle,
-  AlertCircle,
 } from "lucide-react";
 import { WhatsAppIntegration } from "./integrations/WhatsAppIntegration";
 import { TelegramIntegration } from "./integrations/TelegramIntegration";
@@ -54,8 +52,7 @@ import type {
   AgentSettingsFrontend,
   KnowledgeDocument as KnowledgeDocumentAPI,
 } from "@/services/crmAgentsService";
-import { useUpload } from "@/contexts/UploadContext";
-import { Progress } from "@/components/ui/progress";
+import { useWebSocket } from "@/contexts/WebSocketContext";
 
 interface Agent {
   id: string;
@@ -114,8 +111,8 @@ interface KnowledgeDocument {
   type: string;
   size: string;
   uploadedAt: string;
-  status: "pending" | "completed" | "failed"; // <-- NEW
-  errorDetail?: string; // <-- NEW
+  status?: "pending" | "completed" | "failed";
+  errorDetail?: string;
 }
 
 interface WorkingHours {
@@ -159,20 +156,15 @@ export const AgentSettingsModal = ({
   agent,
   onSave,
 }: AgentSettingsModalProps) => {
-  // const [loading, setLoading] = useState(true);
-  // const [saving, setSaving] = useState(false);
-  // const [uploading, setUploading] = useState(false);
-  // const saveInProgressRef = useRef(false);
-
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const saveInProgressRef = useRef(false);
 
-  // Connect to Global Upload Context
-  const { startUpload, uploads } = useUpload();
+  const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
 
-  // Filter uploads to show only THIS agent's files
-  const activeUploads = uploads.filter((u) => u.agentId === agent?.id);
+  const [isDragging, setIsDragging] = useState(false);
+  const { subscribeToMessages } = useWebSocket();
 
   // State for persona config
   const [personaMode, setPersonaMode] = useState<"basic" | "advanced">("basic");
@@ -220,44 +212,46 @@ export const AgentSettingsModal = ({
     },
   });
 
-  // NEW: Polling Mechanism for Pending Documents
+  // Listen for WebSocket Background Processing Updates
   useEffect(() => {
-    // Check if there are any documents currently "pending"
-    const hasPendingDocs = settings.knowledgeBase.some(
-      (doc) => doc.status === "pending",
-    );
+    if (!open || !agent?.id) return;
 
-    // If no pending docs, or modal is closed, do nothing
-    if (!hasPendingDocs || !open || !agent?.id) return;
-
-    // Set up the 3-second polling interval
-    const interval = setInterval(async () => {
-      try {
-        const docs = await crmAgentsService.getKnowledgeDocuments(agent.id);
-
-        const formattedDocs = (docs as any[]).map((doc) => ({
-          id: doc.id,
-          name: doc.name,
-          type: doc.file_type,
-          size: `${doc.file_size_kb} KB`,
-          uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
-          status: doc.metadata?.status || "completed",
-          errorDetail: doc.metadata?.error_detail,
-        }));
-
-        // Update state with fresh statuses
+    const unsubscribe = subscribeToMessages((notification) => {
+      // 2. Success Handler
+      if (
+        notification.type === "document_upload_completed" &&
+        notification.agent_id === agent.id
+      ) {
         setSettings((prev) => ({
           ...prev,
-          knowledgeBase: formattedDocs,
+          knowledgeBase: prev.knowledgeBase.map((doc) =>
+            doc.id === notification.doc_id
+              ? { ...doc, status: "completed" }
+              : doc,
+          ),
         }));
-      } catch (error) {
-        console.error("Failed to poll document status:", error);
+        toast.success(`Knowledge Base Siap: ${notification.filename}`);
       }
-    }, 3000); // 3 seconds
 
-    // Cleanup interval on unmount or when status changes
-    return () => clearInterval(interval);
-  }, [settings.knowledgeBase, open, agent?.id]);
+      // 3. Error Handler
+      else if (
+        notification.type === "document_upload_failed" &&
+        notification.agent_id === agent.id
+      ) {
+        setSettings((prev) => ({
+          ...prev,
+          knowledgeBase: prev.knowledgeBase.map((doc) =>
+            doc.id === notification.doc_id
+              ? { ...doc, status: "failed", errorDetail: notification.error }
+              : doc,
+          ),
+        }));
+        toast.error(`Gagal memproses dokumen: ${notification.filename}`);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [open, agent?.id, subscribeToMessages]);
 
   // Fetch agent settings from API when modal opens
   useEffect(() => {
@@ -376,15 +370,17 @@ export const AgentSettingsModal = ({
           // Transform API settings to local AgentSettings format
           setSettings({
             persona: apiSettings.persona,
-            knowledgeBase: (apiDocuments as any[]).map((doc) => ({
-              id: doc.id,
-              name: doc.name,
-              type: doc.file_type,
-              size: `${doc.file_size_kb} KB`,
-              uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
-              status: doc.metadata?.status || "completed",
-              errorDetail: doc.metadata?.error_detail,
-            })),
+            knowledgeBase: (apiDocuments as KnowledgeDocumentAPI[]).map(
+              (doc) => ({
+                id: doc.id,
+                name: doc.name,
+                type: doc.file_type,
+                size: `${doc.file_size_kb} KB`,
+                uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
+                status: (doc as any).metadata?.status || "completed",
+                errorDetail: (doc as any).metadata?.error_detail,
+              }),
+            ),
             schedule: {
               enabled: apiSettings.schedule.enabled,
               timezone: apiSettings.schedule.timezone,
@@ -462,46 +458,76 @@ export const AgentSettingsModal = ({
     }
   }, [saving, settings, agent, onSave, onClose]);
 
-  const handleFileUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const files = event.target.files;
-    if (!files || files.length === 0) return;
+  const processSelectedFiles = async (fileList: FileList | File[]) => {
+    if (!fileList || fileList.length === 0) return;
+    setUploading(true);
 
-    Array.from(files).forEach((file) => {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error(`File ${file.name} terlalu besar (max 10MB)`);
-        return;
-      }
+    try {
+      const uploadPromises = Array.from(fileList).map(async (file) => {
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`File ${file.name} terlalu besar (max 10MB)`);
+          return null;
+        }
 
-      startUpload(agent.id, file, () => {
-        if (open) {
-          crmAgentsService
-            .getKnowledgeDocuments(agent.id)
-            .then((docs) => {
-              const formattedDocs: KnowledgeDocument[] = (docs as any[]).map(
-                (doc) => ({
-                  id: doc.id,
-                  name: doc.name,
-                  type: doc.file_type,
-                  size: `${doc.file_size_kb} KB`,
-                  uploadedAt: new Date(doc.uploaded_at).toLocaleString(),
-                  status: doc.metadata?.status || "completed",
-                  errorDetail: doc.metadata?.error_detail,
-                }),
-              );
+        try {
+          // Fast upload: Backend returns 202 instantly
+          const uploadedDoc = (await crmAgentsService.uploadKnowledgeDocument(
+            agent.id,
+            file,
+          )) as any;
 
-              setSettings((prev) => ({
-                ...prev,
-                knowledgeBase: formattedDocs,
-              }));
-            })
-            .catch((err) => console.error("Failed to refresh list", err));
+          return {
+            id: uploadedDoc.id,
+            name: uploadedDoc.name,
+            type: uploadedDoc.file_type,
+            size: `${uploadedDoc.file_size_kb} KB`,
+            uploadedAt: new Date(uploadedDoc.uploaded_at).toLocaleString(),
+            status: uploadedDoc.metadata?.status || "pending",
+          };
+        } catch (err) {
+          console.error(`Failed to upload ${file.name}:`, err);
+          return null; // Prevent one failed file from breaking the others
         }
       });
-    });
 
+      const results = await Promise.all(uploadPromises);
+      const successfulUploads = results.filter(
+        (doc) => doc !== null,
+      ) as KnowledgeDocument[];
+
+      if (successfulUploads.length > 0) {
+        setSettings((prev) => ({
+          ...prev,
+          knowledgeBase: [...prev.knowledgeBase, ...successfulUploads],
+        }));
+        // CHANGED: Made this a loud success toast so you know the HTTP request finished
+        toast.success("Dokumen berhasil diunggah! Sedang diproses AI...");
+      }
+    } catch (error) {
+      console.error("Global upload handler failed:", error);
+      toast.error("Terjadi kesalahan saat mengupload dokumen");
+    } finally {
+      setUploading(false); // Unblock UI immediately
+    }
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.files) processSelectedFiles(event.target.files);
     event.target.value = "";
+  };
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files) processSelectedFiles(e.dataTransfer.files);
   };
 
   const handleRemoveDocument = async (docId: string) => {
@@ -518,18 +544,23 @@ export const AgentSettingsModal = ({
     }
   };
 
-  const handleDownloadDocument = async (docId: string, docName: string) => {
+  const handleDownloadDocument = async (docId: string, filename: string) => {
+    if (!agent) return;
     try {
-      toast.info("Downloading document...");
+      setDownloadingDocId(docId);
       await crmAgentsService.downloadKnowledgeDocument(
         agent.id,
         docId,
-        docName,
+        filename,
       );
-      toast.success("Download started");
+      toast.success(`Berhasil mengunduh ${filename}`);
     } catch (error) {
       console.error("Failed to download document:", error);
-      toast.error("Gagal mengunduh dokumen");
+      toast.error(
+        "Gagal mengunduh dokumen. File mungkin tidak ditemukan di storage.",
+      );
+    } finally {
+      setDownloadingDocId(null);
     }
   };
 
@@ -902,87 +933,73 @@ export const AgentSettingsModal = ({
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {/* Upload Area */}
-                      <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                        <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                        <p className="text-sm font-medium mb-1">
-                          Upload Knowledge Documents
-                        </p>
-                        <p className="text-xs text-muted-foreground mb-3">
-                          PDF, DOCX, TXT, CSV (Max 10MB per file)
-                        </p>
-                        <input
-                          type="file"
-                          id="fileUpload"
-                          multiple
-                          accept=".pdf,.doc,.docx,.txt,.csv"
-                          className="hidden"
-                          onChange={handleFileUpload}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() =>
-                            document.getElementById("fileUpload")?.click()
-                          }
-                        >
-                          <Plus className="h-4 w-4 mr-2" />
-                          Choose Files
-                        </Button>
+                      {/* Drag & Drop Area */}
+                      <div
+                        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${
+                          isDragging
+                            ? "border-primary bg-primary/10"
+                            : "border-muted-foreground/25 hover:border-primary/50"
+                        }`}
+                        onDragOver={onDragOver}
+                        onDragLeave={onDragLeave}
+                        onDrop={onDrop}
+                      >
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <div
+                            className={`p-3 rounded-full ${isDragging ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"}`}
+                          >
+                            <Upload className="h-8 w-8" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium mb-1">
+                              Drag & drop dokumen di sini, atau klik tombol di
+                              bawah
+                            </p>
+                            <p className="text-xs text-muted-foreground mb-4">
+                              Mendukung PDF, DOCX, TXT, CSV (Max 10MB per file)
+                            </p>
+                          </div>
+                          <input
+                            type="file"
+                            id="fileUpload"
+                            multiple
+                            accept=".pdf,.doc,.docx,.txt,.csv"
+                            className="hidden"
+                            onChange={handleFileUpload}
+                          />
+                          <Button
+                            variant={isDragging ? "default" : "outline"}
+                            size="sm"
+                            onClick={() =>
+                              document.getElementById("fileUpload")?.click()
+                            }
+                            disabled={uploading}
+                          >
+                            {uploading ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />{" "}
+                                Uploading...
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="h-4 w-4 mr-2" /> Browse Files
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </div>
 
-                      {/* NEW: Active Uploads List (Global Context) */}
-                      {activeUploads.length > 0 && (
-                        <div className="space-y-2 mb-4">
-                          <Label>Uploading...</Label>
-                          {activeUploads.map((item) => (
-                            <div
-                              key={item.id}
-                              className="flex items-center gap-3 p-3 border rounded-lg bg-muted/30"
-                            >
-                              <div className="w-8 h-8 rounded bg-background flex items-center justify-center flex-shrink-0">
-                                {item.status === "success" ? (
-                                  <CheckCircle className="h-5 w-5 text-green-500" />
-                                ) : item.status === "error" ? (
-                                  <AlertCircle className="h-5 w-5 text-red-500" />
-                                ) : (
-                                  <FileText className="h-5 w-5 text-blue-500" />
-                                )}
-                              </div>
-
-                              <div className="flex-1 min-w-0 space-y-1">
-                                <div className="flex justify-between text-sm">
-                                  <span className="font-medium truncate">
-                                    {item.file.name}
-                                  </span>
-                                  <span className="text-xs text-muted-foreground">
-                                    {item.status === "uploading"
-                                      ? `${item.progress.toFixed(0)}%`
-                                      : item.status}
-                                  </span>
-                                </div>
-
-                                {item.status === "uploading" && (
-                                  <Progress
-                                    value={item.progress}
-                                    className="h-1.5"
-                                  />
-                                )}
-
-                                {item.error && (
-                                  <p className="text-xs text-red-500">
-                                    {item.error}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                      {/* Fast Upload Indicator */}
+                      {uploading && (
+                        <Label className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />{" "}
+                          Menyiapkan dokumen ke server...
+                        </Label>
                       )}
 
                       {/* Document List */}
                       {settings.knowledgeBase.length > 0 && (
-                        <div className="space-y-2">
+                        <div className="space-y-2 mt-4">
                           <Label>
                             Uploaded Documents ({settings.knowledgeBase.length})
                           </Label>
@@ -992,13 +1009,12 @@ export const AgentSettingsModal = ({
                                 <CardContent className="p-4">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
-                                      <FileText className="h-8 w-8 text-primary" />
-                                      <div className="flex-1">
+                                      <FileText className="h-8 w-8 text-primary flex-shrink-0" />
+                                      <div>
                                         <div className="flex items-center gap-2">
                                           <p className="font-medium text-sm truncate max-w-[250px]">
                                             {doc.name}
                                           </p>
-                                          {/* Status Badges */}
                                           {doc.status === "pending" && (
                                             <Badge
                                               variant="outline"
@@ -1017,12 +1033,9 @@ export const AgentSettingsModal = ({
                                             </Badge>
                                           )}
                                         </div>
-
                                         <p className="text-xs text-muted-foreground mt-0.5">
                                           {doc.size} • {doc.uploadedAt}
                                         </p>
-
-                                        {/* Error Message Display */}
                                         {doc.status === "failed" &&
                                           doc.errorDetail && (
                                             <p className="text-xs text-red-500 mt-1 bg-red-50 p-1.5 rounded border border-red-100">
@@ -1035,7 +1048,10 @@ export const AgentSettingsModal = ({
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        disabled={doc.status !== "completed"}
+                                        disabled={
+                                          doc.status !== "completed" ||
+                                          downloadingDocId === doc.id
+                                        }
                                         onClick={() =>
                                           handleDownloadDocument(
                                             doc.id,
@@ -1043,7 +1059,11 @@ export const AgentSettingsModal = ({
                                           )
                                         }
                                       >
-                                        <Download className="h-4 w-4" />
+                                        {downloadingDocId === doc.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                        ) : (
+                                          <Download className="h-4 w-4" />
+                                        )}
                                       </Button>
                                       <Button
                                         variant="ghost"

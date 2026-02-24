@@ -27,6 +27,12 @@ export interface AgentBackend {
   last_active_at: string; // ISO timestamp
   created_at: string;
   updated_at: string;
+  integrations?: Array<{
+    id: string;
+    status: string;
+    channel: string;
+    enabled: boolean;
+  }>;
 }
 
 /**
@@ -44,6 +50,7 @@ export interface AgentFrontend {
   avgResponseTime: string; // Human-readable format like "2.5 min"
   lastActive: string; // Human-readable format like "Just now"
   settings?: any;
+  activeIntegrations: string[];
 }
 
 /**
@@ -292,6 +299,11 @@ export function transformAgentToFrontend(
     resolvedToday: backendAgent.resolved_today_count,
     avgResponseTime: formatResponseTime(backendAgent.avg_response_time_seconds),
     lastActive: formatRelativeTime(backendAgent.last_active_at),
+    activeIntegrations: backendAgent.integrations
+      ? backendAgent.integrations
+          .filter((intg) => intg.enabled)
+          .map((intg) => intg.channel)
+      : [],
   };
 }
 
@@ -809,6 +821,9 @@ export async function updateAgentIntegration(
 
 /**
  * Download a knowledge document
+ * @param agentId - Agent UUID
+ * @param documentId - Document UUID
+ * @param filename - Original name of the file to save as
  */
 export async function downloadKnowledgeDocument(
   agentId: string,
@@ -816,24 +831,25 @@ export async function downloadKnowledgeDocument(
   filename: string,
 ): Promise<void> {
   try {
-    // 1. Get the file as a Blob using the new apiClient method
-    // Note: This endpoint must be implemented by Backend as discussed
+    // 1. Get the file as a Blob using the apiClient method
     const blob = await apiClient.getBlob(
       `/crm/agents/${agentId}/knowledge-documents/${documentId}/download`,
     );
 
-    // 2. Create a download link
+    // 2. Create a local object URL for the Blob
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
+
+    // 3. Set the download attribute with the filename
     link.setAttribute("download", filename);
 
-    // 3. Trigger download
+    // 4. Append to body, click to trigger download, and remove
     document.body.appendChild(link);
     link.click();
-
-    // 4. Cleanup
     link.remove();
+
+    // 5. Cleanup the URL memory
     window.URL.revokeObjectURL(url);
   } catch (error) {
     console.error(`[CRM Agents Service] Error downloading document:`, error);

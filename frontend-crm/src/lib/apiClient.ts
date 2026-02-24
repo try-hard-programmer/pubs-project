@@ -48,9 +48,6 @@ class ApiClient {
 
     const url = `${this.baseUrl}${endpoint}`;
 
-    // Log request for debugging (remove in production if needed)
-    console.log(`[API Request] ${options.method || "GET"} ${url}`);
-
     return fetch(url, {
       ...options,
       headers,
@@ -248,6 +245,7 @@ class ApiClient {
       throw new Error(text || `GET Blob request failed (${response.status})`);
     }
 
+    // Return the raw file data instead of trying to parse JSON
     return response.blob();
   }
 }
