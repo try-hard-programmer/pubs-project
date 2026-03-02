@@ -77,6 +77,9 @@ export const MCPIntegration = ({
   const [servers, setServers] = useState<MCPServer[]>(config.servers || []);
   const [isAddingServer, setIsAddingServer] = useState(false);
   const [testingServerId, setTestingServerId] = useState<string | null>(null);
+  const [initializingServerId, setInitializingServerId] = useState<
+    string | null
+  >(null);
 
   // New server form state
   const [newServer, setNewServer] = useState<Partial<MCPServer>>({
@@ -179,12 +182,9 @@ export const MCPIntegration = ({
     setServers(testingServers);
 
     try {
-      // REAL API CALL
-      const result = await mcpService.testConnection({
-        url: server.url,
-        transport: server.transport,
-        apiKey: server.apiKey,
-      });
+      // REAL API CALL: Step 2 - Test Connection
+      // Note: We only pass agentId. The backend uses the config saved in Step 1.
+      const result = await mcpService.testConnection(agentId);
 
       if (result.success && result.status === "connected") {
         const connectedServers = servers.map((s) =>
@@ -193,7 +193,7 @@ export const MCPIntegration = ({
                 ...s,
                 status: "connected" as ConnectionStatus,
                 lastConnected: new Date().toISOString(),
-                capabilities: result.capabilities,
+                capabilities: result.capabilities || [],
               }
             : s,
         );
@@ -203,7 +203,9 @@ export const MCPIntegration = ({
         // Persist success state
         persistMCPSettings(connectedServers, enabled);
 
-        toast.success(`Connected to ${server.name} (${result.latency_ms}ms)`);
+        toast.success(
+          `Connected! Found ${result.tools_count || 0} potential tools.`,
+        );
       } else {
         throw new Error("Connection reported failure");
       }
@@ -217,6 +219,50 @@ export const MCPIntegration = ({
       toast.error("Connection failed");
     } finally {
       setTestingServerId(null);
+    }
+  };
+
+  const handleInitialize = async (serverId: string) => {
+    const server = servers.find((s) => s.id === serverId);
+    if (!server) return;
+
+    setInitializingServerId(serverId);
+    setErrorMessage("");
+
+    try {
+      // REAL API CALL: Step 3 - Initialize Tools
+      // Note: Empty body, strictly relying on agentId
+      const result = await mcpService.initializeServer(agentId);
+
+      if (result.success) {
+        toast.success(
+          result.message ||
+            `Initialized! Loaded ${result.tools_count} AI tools.`,
+        );
+
+        // MANDATORY: Extract tools and save to localStorage for the Chat UI to consume
+        if (result.tools && Array.isArray(result.tools)) {
+          localStorage.setItem("tools", JSON.stringify(result.tools));
+        }
+
+        // Update server capabilities/status in UI
+        const updatedServers = servers.map((s) =>
+          s.id === serverId
+            ? { ...s, capabilities: ["resources/read", "tools/list"] }
+            : s,
+        );
+        setServers(updatedServers);
+        onConfigUpdate({ servers: updatedServers });
+        persistMCPSettings(updatedServers, enabled);
+      } else {
+        throw new Error("Initialization returned failure status.");
+      }
+    } catch (error: any) {
+      console.error("MCP Initialization Failed:", error);
+      setErrorMessage(error.message || `Failed to initialize ${server.name}`);
+      toast.error("Initialization failed");
+    } finally {
+      setInitializingServerId(null);
     }
   };
 
@@ -442,33 +488,59 @@ export const MCPIntegration = ({
                       </p>
                     )}
 
-                    {/* Test Connection Button */}
-                    <Button
-                      size="sm"
-                      variant={
-                        server.status === "connected" ? "outline" : "default"
-                      }
-                      onClick={() => handleTestConnection(server.id)}
-                      disabled={testingServerId === server.id}
-                      className="w-full gap-2"
-                    >
-                      {testingServerId === server.id ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Testing Connection...
-                        </>
-                      ) : server.status === "connected" ? (
-                        <>
-                          <CheckCircle className="h-4 w-4" />
-                          Reconnect
-                        </>
-                      ) : (
-                        <>
-                          <Plug2 className="h-4 w-4" />
-                          Test Connection
-                        </>
-                      )}
-                    </Button>
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2">
+                      <Button
+                        size="sm"
+                        variant={
+                          server.status === "connected" ? "outline" : "default"
+                        }
+                        onClick={() => handleTestConnection(server.id)}
+                        disabled={
+                          testingServerId === server.id ||
+                          initializingServerId === server.id
+                        }
+                        className="w-full gap-2"
+                      >
+                        {testingServerId === server.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                            Testing...
+                          </>
+                        ) : server.status === "connected" ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" /> Reconnect
+                          </>
+                        ) : (
+                          <>
+                            <Plug2 className="h-4 w-4" /> Test Connection
+                          </>
+                        )}
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => handleInitialize(server.id)}
+                        disabled={
+                          testingServerId === server.id ||
+                          initializingServerId === server.id ||
+                          server.status !== "connected"
+                        }
+                        className="w-full gap-2"
+                      >
+                        {initializingServerId === server.id ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />{" "}
+                            Initializing...
+                          </>
+                        ) : (
+                          <>
+                            <Server className="h-4 w-4" /> Initialize
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}

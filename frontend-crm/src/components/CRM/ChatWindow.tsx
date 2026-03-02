@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Send,
@@ -91,10 +92,12 @@ interface Ticket {
  */
 interface Agent {
   id: string;
+  userId?: string | null;
   name: string;
   email: string;
   phone: string;
   status: "active" | "inactive" | "busy";
+  activeIntegrations?: string[];
 }
 
 /**
@@ -257,20 +260,14 @@ export const ChatWindow = ({
   };
 
   const humanAgents = agents.filter((agent) => {
-    // 1. Must have a status (Basic check)
-    if (!agent.status) return false;
+    console.log(agent, "<<<<<<<<<<<,");
+    // 1. Only show active agents
+    // if (agent.status !== "active") return false;
 
-    // 2. Exclude by ID (Strongest check)
-    if (aiAgentId && agent.id === aiAgentId) return false;
+    // 2. TRUE HUMAN CHECK: Human agents must have a user_id!
+    const isHuman = agent.userId !== null && agent.userId !== undefined;
 
-    // 3. Exclude by Name (Fallback)
-    if (aiAgentName && agent.name === aiAgentName) return false;
-
-    // 4. Exclude generic AI names (Safety net)
-    if (agent.name === "AI Agent" || agent.name.toLowerCase().includes("bot"))
-      return false;
-
-    return true;
+    return isHuman;
   });
 
   // RENDER HELPERS
@@ -442,13 +439,31 @@ export const ChatWindow = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                toast.info("Phone calls will be coming soon, stay tuned!")
+              }
+            >
               <Phone className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                toast.info("Video calls will be coming soon, stay tuned!")
+              }
+            >
               <Video className="w-4 h-4" />
             </Button>
-            <Button variant="ghost" size="icon">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() =>
+                toast.info("Info will be coming soon, stay tuned!")
+              }
+            >
               <Info className="w-4 h-4" />
             </Button>
 

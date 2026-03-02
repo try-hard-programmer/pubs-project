@@ -41,13 +41,13 @@ interface SidebarProps {
 
 const mainItems = [
   { icon: LayoutDashboard, label: "Dashboard", key: "dashboard" },
-  { icon: Bot, label: "AI Workers", key: "ai-workers" },
+  // { icon: Bot, label: "AI Workers", key: "ai-workers" },
 ];
 
 const applicationItems = [
   { icon: Users, label: "CRM", key: "crm" },
-  { icon: BarChart3, label: "Data Analytics", key: "data-analytics" },
-  { icon: Calculator, label: "Accounting", key: "accounting" },
+  // { icon: BarChart3, label: "Data Analytics", key: "data-analytics" },
+  // { icon: Calculator, label: "Accounting", key: "accounting" },
 ];
 
 const fileManagerItems = [
@@ -363,7 +363,7 @@ export const Sidebar = ({
       </div>
 
       <div className="text-center text-xs text-muted-foreground border-t p-2">
-        v1.1.1
+        v1.3.0
       </div>
     </aside>
   );

@@ -1290,6 +1290,10 @@ export const CustomerService = ({
       );
 
       toast.success("Chat berhasil diassign ke Anda");
+
+      // 🚀 ADDED: Close the current chat window and switch to Assigned tab
+      setActiveChat(null);
+      onFilterChange("assigned");
     } catch (error) {
       console.error("Error assigning chat:", error);
       toast.error("Gagal assign chat");
@@ -1314,6 +1318,10 @@ export const CustomerService = ({
       );
 
       toast.success("Chat berhasil diresolve");
+
+      // 🚀 ADDED: Close the current chat window and switch to Unassigned tab
+      setActiveChat(null);
+      onFilterChange("unassigned");
     } catch (error) {
       console.error("Error resolving chat:", error);
       toast.error("Gagal resolve chat");
@@ -1348,6 +1356,10 @@ export const CustomerService = ({
       );
 
       toast.success("Chat berhasil di-escalate ke human agent");
+
+      // 🚀 ADDED: Close the current chat window and switch to Assigned tab
+      setActiveChat(null);
+      onFilterChange("assigned");
     } catch (error: any) {
       console.error("Error escalating chat:", error);
       const errorMessage =

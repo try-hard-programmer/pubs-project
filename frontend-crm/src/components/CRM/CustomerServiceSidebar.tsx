@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format, subDays, startOfDay, endOfDay } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
+import { AlertTriangle, Calendar as CalendarIcon } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -87,6 +87,37 @@ interface CustomerServiceSidebarProps {
   hasMore?: boolean;
   isLoadingMore?: boolean;
 }
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+const checkIsAiError = (chat: Chat): boolean => {
+  if (chat.handledBy !== "ai" || !chat.lastMessage) return false;
+
+  const msg = chat.lastMessage.toLowerCase();
+
+  // 🚨 Add any new AI handoff or error phrases to this list!
+  const triggerPhrases = [
+    "maaf",
+    "sorry",
+    "belum bisa menjawab",
+    "connect to your engineer",
+    "maaf ya, kali ini",
+    "hubungi tim",
+    "hubungi team",
+    "menghubungi tim",
+    "call our team",
+    "contact our team",
+    "agent manusia",
+    "human agent",
+    "customer service",
+    "tim support",
+  ];
+
+  // Returns true if ANY of the phrases above are found inside the message
+  return triggerPhrases.some((phrase) => msg.includes(phrase));
+};
 
 // ============================================================================
 // MAIN COMPONENT
@@ -473,94 +504,122 @@ export const CustomerServiceSidebar = ({
           </div>
         ) : (
           <div className="divide-y divide-border/50">
-            {filteredChats.map((chat) => (
-              <div
-                key={chat.id}
-                onClick={() => onChatSelect(chat.id)}
-                className={cn(
-                  "p-3 cursor-pointer transition-all hover:bg-muted/50 group relative",
-                  activeChat === chat.id
-                    ? "bg-muted border-l-4 border-l-primary pl-2"
-                    : "border-l-4 border-l-transparent",
-                  chat.status === "resolved" &&
-                    "opacity-70 bg-gray-50/50 dark:bg-gray-900/10",
-                )}
-              >
-                <div className="flex items-start gap-3">
-                  <div className="relative">
-                    <Avatar className="w-10 h-10 border shadow-sm">
-                      <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
-                        {chat.customerName
-                          ? chat.customerName.charAt(0).toUpperCase()
-                          : "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div
-                      className={cn(
-                        "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
-                        getStatusColor(chat.status),
-                      )}
-                    />
-                  </div>
+            {filteredChats.map((chat) => {
+              const isAiHandoffError = checkIsAiError(chat);
 
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-semibold text-sm truncate text-foreground/90">
-                        {chat.customerName}
-                        {/* Simple mark from chat group */}
-                        {chat.isGroup && (
-                          <span className="ml-2 text-[10px] font-bold text-blue-500 border border-blue-200 px-1 rounded">
-                            Group
-                          </span>
+              return (
+                <div
+                  key={chat.id}
+                  onClick={() => onChatSelect(chat.id)}
+                  className={cn(
+                    "px-3 py-3 cursor-pointer transition-all group relative",
+                    isAiHandoffError
+                      ? activeChat === chat.id
+                        ? "bg-muted"
+                        : "hover:bg-muted/50"
+                      : activeChat === chat.id
+                        ? "bg-muted"
+                        : "hover:bg-muted/50",
+                    chat.status === "resolved" && "opacity-60",
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="relative">
+                      <Avatar className="w-10 h-10 border shadow-sm">
+                        <AvatarFallback className="bg-primary/10 text-primary font-semibold text-sm">
+                          {chat.customerName
+                            ? chat.customerName.charAt(0).toUpperCase()
+                            : "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div
+                        className={cn(
+                          "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background",
+                          isAiHandoffError
+                            ? "bg-red-500"
+                            : getStatusColor(chat.status),
                         )}
-                      </h4>
-
-                      <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
-                        {chat.timestamp}
-                      </span>
+                      />
                     </div>
 
-                    <p className="text-xs text-muted-foreground truncate line-clamp-1">
-                      {chat.lastMessage}
-                    </p>
-
-                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                      {/* Handler Badge */}
-                      <Badge
-                        variant="secondary"
-                        className="h-5 px-1.5 text-[10px] gap-1 font-normal bg-secondary/50"
-                      >
-                        {chat.handledBy === "ai" ? (
-                          <Bot className="w-3 h-3" />
-                        ) : (
-                          <User className="w-3 h-3" />
-                        )}
-                        <span className="truncate max-w-[80px]">
-                          {chat.assignedTo}
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold text-sm truncate text-foreground/90">
+                          {chat.customerName}
+                          {chat.isGroup && (
+                            <span className="ml-2 text-[10px] font-bold text-blue-500 border border-blue-200 px-1 rounded">
+                              Group
+                            </span>
+                          )}
+                        </h4>
+                        <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
+                          {chat.timestamp}
                         </span>
-                      </Badge>
+                      </div>
 
-                      {/* Channel */}
-                      {chat.channel && (
-                        <Badge
-                          variant="outline"
-                          className="h-5 px-1.5 text-[10px] font-normal border-border/50 text-muted-foreground capitalize"
+                      <div className="flex items-center gap-1 min-w-0">
+                        {isAiHandoffError && (
+                          <AlertTriangle className="w-3 h-3 shrink-0 text-red-500" />
+                        )}
+                        <p
+                          className={cn(
+                            "text-xs truncate",
+                            isAiHandoffError
+                              ? "text-red-500 dark:text-red-400"
+                              : "text-muted-foreground",
+                          )}
                         >
-                          {chat.channel}
-                        </Badge>
-                      )}
+                          {chat.lastMessage}
+                        </p>
+                      </div>
 
-                      {/* Unread Counter */}
-                      {chat.unreadCount > 0 && (
-                        <Badge className="ml-auto bg-primary text-primary-foreground h-5 px-1.5 min-w-[20px] justify-center text-[10px] shadow-sm">
-                          {chat.unreadCount}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "h-5 px-1.5 text-[10px] gap-1 font-normal",
+                            isAiHandoffError
+                              ? "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400"
+                              : "bg-secondary/50",
+                          )}
+                        >
+                          {chat.handledBy === "ai" ? (
+                            <Bot className="w-3 h-3" />
+                          ) : (
+                            <User className="w-3 h-3" />
+                          )}
+                          <span className="truncate max-w-[80px]">
+                            {chat.assignedTo}
+                          </span>
                         </Badge>
-                      )}
+
+                        {chat.channel && (
+                          <Badge
+                            variant="outline"
+                            className="h-5 px-1.5 text-[10px] font-normal border-border/50 text-muted-foreground capitalize"
+                          >
+                            {chat.channel}
+                          </Badge>
+                        )}
+
+                        {chat.unreadCount > 0 && (
+                          <Badge
+                            className={cn(
+                              "ml-auto h-5 px-1.5 min-w-[20px] justify-center text-[10px] shadow-sm",
+                              isAiHandoffError
+                                ? "bg-red-500 text-white"
+                                : "bg-primary text-primary-foreground",
+                            )}
+                          >
+                            {chat.unreadCount}
+                          </Badge>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {!isLoading && filteredChats.length === 0 && (
               <div className="flex flex-col items-center justify-center py-12 text-center space-y-3 px-4">
@@ -588,7 +647,6 @@ export const CustomerServiceSidebar = ({
               </div>
             )}
 
-            {/* NEW: Load More Button */}
             {hasMore && !searchQuery && (
               <div className="p-4 flex justify-center">
                 <Button

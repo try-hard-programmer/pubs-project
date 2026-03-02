@@ -624,15 +624,26 @@ export const NewChatModal = ({
             </TabsContent>
           </Tabs>
 
+          {/* 1. Assign ke Agent */}
           <div className="space-y-2">
             <Label>Assign ke Agent</Label>
             <Select
               value={assignedAgentId}
-              onValueChange={setAssignedAgentId}
+              onValueChange={(val) => {
+                setAssignedAgentId(val);
+                // SMART LOGIC: Auto-assign integration if this agent has it
+                const selectedAgent = agents.find((a) => a.id === val);
+                if (
+                  selectedAgent &&
+                  selectedAgent.activeIntegrations?.includes(channel)
+                ) {
+                  setIntegrationAgentId(val);
+                }
+              }}
               disabled={isCreating}
             >
               <SelectTrigger>
-                <SelectValue />
+                <SelectValue placeholder="Pilih agent..." />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned">Tidak assign agent</SelectItem>
@@ -647,44 +658,65 @@ export const NewChatModal = ({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Assign ke Contact Integration Agent</Label>
-            <Select
-              value={integrationAgentId}
-              onValueChange={setIntegrationAgentId}
-              disabled={isCreating}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">
-                  Tidak assign agent integration
-                </SelectItem>
-                {agents
-                  .filter(
-                    (agent) =>
-                      agent.status === "active" &&
-                      agent.activeIntegrations?.includes(channel),
-                  )
-                  .map((agent) => (
-                    <SelectItem key={agent.id} value={agent.id}>
-                      {agent.name}
+          {/* 2. Assign ke Contact Integration Agent */}
+          {(() => {
+            // Cek apakah agent yang di-assign punya integrasi untuk channel ini
+            const currentAssignedAgent = agents.find(
+              (a) => a.id === assignedAgentId,
+            );
+            const assignedHasIntegration =
+              currentAssignedAgent?.activeIntegrations?.includes(channel) ??
+              false;
+
+            return (
+              <div className="space-y-2">
+                <Label>Assign ke Contact Integration Agent</Label>
+                <Select
+                  value={integrationAgentId}
+                  onValueChange={setIntegrationAgentId}
+                  // SMART LOGIC: Disable (lock) dropdown jika agent di atas sudah punya integrasi
+                  disabled={isCreating || assignedHasIntegration}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pilih agent integration..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned">
+                      Tidak assign agent integration
                     </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {agents.filter(
-              (a) =>
-                a.status === "active" &&
-                a.activeIntegrations?.includes(channel),
-            ).length === 0 && (
-              <p className="text-xs text-amber-600">
-                Tidak ada agent aktif yang memiliki integrasi{" "}
-                {selectedChannel?.label}.
-              </p>
-            )}
-          </div>
+                    {agents
+                      .filter(
+                        (agent) =>
+                          agent.status === "active" &&
+                          agent.activeIntegrations?.includes(channel),
+                      )
+                      .map((agent) => (
+                        <SelectItem key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+
+                {/* Info Text UX */}
+                {assignedHasIntegration ? (
+                  <p className="text-xs text-green-600">
+                    Agent yang dipilih akan otomatis menggunakan integrasinya
+                    sendiri.
+                  </p>
+                ) : agents.filter(
+                    (a) =>
+                      a.status === "active" &&
+                      a.activeIntegrations?.includes(channel),
+                  ).length === 0 ? (
+                  <p className="text-xs text-amber-600">
+                    Tidak ada agent aktif yang memiliki integrasi{" "}
+                    {selectedChannel?.label}.
+                  </p>
+                ) : null}
+              </div>
+            );
+          })()}
 
           <div className="space-y-2">
             <Label>Pesan Awal</Label>

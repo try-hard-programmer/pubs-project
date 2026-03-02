@@ -157,6 +157,7 @@ export const AgentSettingsModal = ({
   onSave,
 }: AgentSettingsModalProps) => {
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const saveInProgressRef = useRef(false);
@@ -257,6 +258,8 @@ export const AgentSettingsModal = ({
   useEffect(() => {
     if (open && agent?.id) {
       setLoading(true);
+      setLoadError(false);
+
       Promise.all([
         crmAgentsService.getAgentSettings(agent.id),
         crmAgentsService.getKnowledgeDocuments(agent.id),
@@ -393,6 +396,7 @@ export const AgentSettingsModal = ({
         })
         .catch((error) => {
           console.error("Failed to fetch agent settings:", error);
+          setLoadError(true);
           toast.error("Gagal memuat pengaturan agent");
         })
         .finally(() => {
@@ -708,6 +712,7 @@ export const AgentSettingsModal = ({
           </p>
         </DialogHeader>
 
+        {/* Loading State */}
         {loading && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center space-y-3">
@@ -719,7 +724,18 @@ export const AgentSettingsModal = ({
           </div>
         )}
 
-        {!loading && (
+        {/* Error State */}
+        {!loading && loadError && (
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <AlertTriangle className="h-12 w-12 text-yellow-500 mb-4" />
+            <h3 className="text-xl font-semibold mb-2">Settings Not Found</h3>
+            <p className="text-muted-foreground">
+              You should contact the administrator for this case. Thanks.
+            </p>
+          </div>
+        )}
+
+        {!loading && !loadError && (
           <>
             <Tabs
               defaultValue="persona"
@@ -913,10 +929,41 @@ export const AgentSettingsModal = ({
                             }))
                           }
                         />
-                        <p className="text-xs text-muted-foreground">
-                          Instruksi ini akan menjadi panduan utama agent dalam
-                          berinteraksi dengan customer.
-                        </p>
+                        <div className="text-xs text-muted-foreground mt-2 space-y-1">
+                          <p>
+                            Tuliskan instruksi spesifik untuk memandu behaviour
+                            agent ini.
+                          </p>
+                          <ul className="list-disc pl-4 text-blue-600 dark:text-blue-400 space-y-1 mt-1">
+                            <li>
+                              Karakter dasar (Nama, Tone, dan Bahasa) otomatis
+                              tetap digunakan.
+                            </li>
+                            <li>
+                              Anda dapat mengetik{" "}
+                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
+                                {"{name_user}"}
+                              </code>{" "}
+                              agar AI otomatis menyapa nama customer.
+                            </li>
+                            <li>
+                              Gunakan{" "}
+                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
+                                {"{current_time}"}
+                              </code>{" "}
+                              dan{" "}
+                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
+                                {"{current_date}"}
+                              </code>{" "}
+                              untuk menyisipkan waktu & tanggal saat ini
+                              (GMT+7).
+                            </li>
+                            <li>
+                              Fokuskan instruksi ini pada alur percakapan atau
+                              aturan khusus bisnis Anda.
+                            </li>
+                          </ul>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
