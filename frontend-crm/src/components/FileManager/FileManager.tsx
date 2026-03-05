@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Search,
@@ -32,12 +32,15 @@ import { FolderInfoAlert } from "./FolderInfoAlert";
 import { useFiles } from "@/hooks/useFiles";
 import { toast } from "sonner";
 import { FileFilterDropdown } from "../FileFilterControl";
+import { useRole } from "@/contexts/RoleContext";
+import { useWebSocket } from "@/contexts/WebSocketContext";
 
 export const FileManager = () => {
   const { folderId } = useParams<{ folderId?: string }>();
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [openUpload, setOpenUpload] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSection, setActiveSection] = useState("all");
@@ -50,14 +53,49 @@ export const FileManager = () => {
     Array<{ id: string | null; name: string }>
   >([{ id: null, name: "My Drive" }]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const { userRoles } = useRole();
+  const organizationId = userRoles?.[0]?.organization_id;
+  const completedToasted = useRef<Set<string>>(new Set());
+  const failedToasted = useRef<Set<string>>(new Set());
 
-  console.log("FileManager state:", {
-    currentFolderId,
-    activeSection,
-    urlFolderId: folderId,
-  });
+  const { subscribeToMessages } = useWebSocket();
 
   const { createFolder, creatingFolder } = useFiles();
+
+  useEffect(() => {
+    if (!organizationId) return;
+
+    const unsubscribe = subscribeToMessages((notification: any) => {
+      if (notification.type === "file_upload_completed") {
+        const docId = notification.doc_id;
+        const fileName = notification.filename;
+
+        // Cegah toast 3x per doc_id
+        if (!completedToasted.current.has(docId)) {
+          completedToasted.current.add(docId);
+          toast.success(`File siap: ${fileName}`);
+        }
+      }
+
+      if (notification.type === "file_upload_failed") {
+        const docId = notification.docId;
+        const fileName = notification.filename;
+        const errorMessage = notification.error || "Unknown error";
+
+        if (!failedToasted.current.has(docId)) {
+          failedToasted.current.add(docId);
+          toast.error(`Gagal memproses: ${fileName}\n${errorMessage}`);
+        }
+      }
+    });
+
+    return () => {
+      // Opsional: bersihkan set saat unmount
+      completedToasted.current.clear();
+      failedToasted.current.clear();
+      unsubscribe();
+    };
+  }, [organizationId, subscribeToMessages]);
 
   // Sync URL params with state
   useEffect(() => {
@@ -132,11 +170,11 @@ export const FileManager = () => {
         currentFolderId,
       });
       const isValid = /^[a-zA-Z0-9\s._-\u00C0-\u024F\u1E00-\u1EFF]+$/.test(
-        name
+        name,
       );
       if (!isValid) {
         toast.error(
-          "Error: Failed Create Folder Allowed characters: letters, numbers, spaces, . _ -"
+          "Error: Failed Create Folder Allowed characters: letters, numbers, spaces, . _ -",
         );
       } else {
         try {
@@ -162,7 +200,7 @@ export const FileManager = () => {
     } catch (error: any) {
       console.error("Error creating folder:", error);
       toast.error(
-        "Error: Failed to create folder: The parent folder contains invalid characters. Please rename the parent folder to use only letters, numbers, spaces, dot (.), underscore (_), and dash (-)."
+        "Error: Failed to create folder: The parent folder contains invalid characters. Please rename the parent folder to use only letters, numbers, spaces, dot (.), underscore (_), and dash (-).",
       );
     }
   };
@@ -452,6 +490,7 @@ export const FileManager = () => {
               setShowUpload(false);
             }}
             currentFolderId={currentFolderId}
+            open={showUpload}
           />
         )}
 

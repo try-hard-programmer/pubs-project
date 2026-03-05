@@ -147,17 +147,15 @@ export const NewChatModal = ({
     searchTimeoutRef.current = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const results = await getCustomers({ search: searchQuery, limit: 10 });
-
-        const filteredResults = results.filter((customer) => {
-          if (channel === "whatsapp") return !!customer.phone;
-          if (channel === "telegram")
-            return !!(customer.metadata?.telegram_id || customer.phone);
-          if (channel === "email") return !!customer.email;
-          return true;
+        // 🔥 Use the new backend parameter and drop the limit to 5
+        const results = await getCustomers({
+          search: searchQuery,
+          limit: 5,
+          channel, // Pass the state directly to your updated endpoint
         });
 
-        setSearchResults(filteredResults.slice(0, 5));
+        // We completely removed the client-side filteredResults block
+        setSearchResults(results);
       } catch (error) {
         console.error("Failed to search customers", error);
       } finally {

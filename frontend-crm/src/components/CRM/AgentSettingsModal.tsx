@@ -214,45 +214,73 @@ export const AgentSettingsModal = ({
   });
 
   // Listen for WebSocket Background Processing Updates
+  // NEW: Polling Fallback for Document Processing
+  // This runs alongside the WebSocket. If the WS fails on localhost, this will catch the update.
   useEffect(() => {
     if (!open || !agent?.id) return;
 
-    const unsubscribe = subscribeToMessages((notification) => {
-      // 2. Success Handler
-      if (
-        notification.type === "document_upload_completed" &&
-        notification.agent_id === agent.id
-      ) {
-        setSettings((prev) => ({
-          ...prev,
-          knowledgeBase: prev.knowledgeBase.map((doc) =>
-            doc.id === notification.doc_id
-              ? { ...doc, status: "completed" }
-              : doc,
-          ),
-        }));
-        toast.success(`Knowledge Base Siap: ${notification.filename}`);
-      }
+    // Check if any document is currently in the "pending" state
+    const hasPendingDocuments = settings.knowledgeBase.some(
+      (doc) => doc.status === "pending",
+    );
 
-      // 3. Error Handler
-      else if (
-        notification.type === "document_upload_failed" &&
-        notification.agent_id === agent.id
-      ) {
-        setSettings((prev) => ({
-          ...prev,
-          knowledgeBase: prev.knowledgeBase.map((doc) =>
-            doc.id === notification.doc_id
-              ? { ...doc, status: "failed", errorDetail: notification.error }
-              : doc,
-          ),
-        }));
-        toast.error(`Gagal memproses dokumen: ${notification.filename}`);
-      }
-    });
+    if (!hasPendingDocuments) return;
 
-    return () => unsubscribe();
-  }, [open, agent?.id, subscribeToMessages]);
+    // If there are pending documents, ping the server every 3 seconds
+    const pollInterval = setInterval(async () => {
+      try {
+        const latestDocs = await crmAgentsService.getKnowledgeDocuments(
+          agent.id,
+        );
+
+        let hasChanges = false;
+
+        // Map the fresh API data to our frontend format
+        const updatedDocs = latestDocs.map((apiDoc) => {
+          const newStatus = (apiDoc as any).metadata?.status || "completed";
+          const newError = (apiDoc as any).metadata?.error_detail;
+
+          // Find the current doc in state to see if it changed
+          const currentDoc = settings.knowledgeBase.find(
+            (d) => d.id === apiDoc.id,
+          );
+
+          if (currentDoc && currentDoc.status !== newStatus) {
+            hasChanges = true;
+
+            // Optional: Show a toast when the status changes via polling
+            if (newStatus === "completed") {
+              toast.success(`Knowledge Base Siap: ${apiDoc.name}`);
+            } else if (newStatus === "failed") {
+              toast.error(`Gagal memproses dokumen: ${apiDoc.name}`);
+            }
+          }
+
+          return {
+            id: apiDoc.id,
+            name: apiDoc.name,
+            type: apiDoc.file_type,
+            size: `${apiDoc.file_size_kb} KB`,
+            uploadedAt: new Date(apiDoc.uploaded_at).toLocaleString(),
+            status: newStatus,
+            errorDetail: newError,
+          };
+        });
+
+        // Only trigger a re-render if a document actually finished processing
+        if (hasChanges) {
+          setSettings((prev) => ({
+            ...prev,
+            knowledgeBase: updatedDocs,
+          }));
+        }
+      } catch (error) {
+        console.error("Polling failed to fetch updated documents:", error);
+      }
+    }, 3000); // 3 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [open, agent?.id, settings.knowledgeBase]);
 
   // Fetch agent settings from API when modal opens
   useEffect(() => {
@@ -931,36 +959,38 @@ export const AgentSettingsModal = ({
                         />
                         <div className="text-xs text-muted-foreground mt-2 space-y-1">
                           <p>
-                            Tuliskan instruksi spesifik untuk memandu behaviour
-                            agent ini.
+                            Provide clear and specific instructions to define
+                            how this agent should behave.
                           </p>
                           <ul className="list-disc pl-4 text-blue-600 dark:text-blue-400 space-y-1 mt-1">
                             <li>
-                              Karakter dasar (Nama, Tone, dan Bahasa) otomatis
-                              tetap digunakan.
+                              The agent’s core identity (Name, Tone, and
+                              Language) and system context (Time, Date, and User
+                              Identity) are{" "}
+                              <strong>automatically applied</strong> in the
+                              background.
                             </li>
                             <li>
-                              Anda dapat mengetik{" "}
+                              <strong>(Optional)</strong> You may include{" "}
                               <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
-                                {"{name_user}"}
+                                (&#123;name_user&#125;)
+                              </code>
+                              {", "}
+                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
+                                (&#123;current_time&#125;)
+                              </code>
+                              {", or "}
+                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
+                                (&#123;current_date&#125;)
                               </code>{" "}
-                              agar AI otomatis menyapa nama customer.
+                              only if you need to control exactly where the
+                              greeting or time information appears in the
+                              response format.
                             </li>
                             <li>
-                              Gunakan{" "}
-                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
-                                {"{current_time}"}
-                              </code>{" "}
-                              dan{" "}
-                              <code className="bg-blue-100 dark:bg-blue-900/50 px-1 py-0.5 rounded text-[10px] font-bold">
-                                {"{current_date}"}
-                              </code>{" "}
-                              untuk menyisipkan waktu & tanggal saat ini
-                              (GMT+7).
-                            </li>
-                            <li>
-                              Fokuskan instruksi ini pada alur percakapan atau
-                              aturan khusus bisnis Anda.
+                              Use this field strictly for conversation flow
+                              rules, response boundaries, and any
+                              business-specific SOP or constraints.
                             </li>
                           </ul>
                         </div>
@@ -1585,7 +1615,7 @@ export const AgentSettingsModal = ({
                         </div>
 
                         {/* Sentiment Threshold */}
-                        <div className="space-y-2">
+                        {/* <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <Label>Sentiment Threshold</Label>
                             <Badge variant="outline">
@@ -1628,10 +1658,10 @@ export const AgentSettingsModal = ({
                             Transfer jika sentiment customer di bawah threshold
                             ini.
                           </p>
-                        </div>
+                        </div> */}
 
                         {/* Unanswered Questions */}
-                        <div className="space-y-2">
+                        {/*  <div className="space-y-2">
                           <Label htmlFor="unansweredQuestions">
                             Unanswered Questions Limit
                           </Label>
@@ -1668,10 +1698,10 @@ export const AgentSettingsModal = ({
                             Transfer jika AI gagal menjawab pertanyaan customer
                             sebanyak ini.
                           </p>
-                        </div>
+                        </div> */}
 
                         {/* Escalation Message */}
-                        <div className="space-y-2">
+                        {/* <div className="space-y-2">
                           <Label htmlFor="escalationMessage">
                             Escalation Message
                           </Label>
@@ -1700,7 +1730,7 @@ export const AgentSettingsModal = ({
                             Pesan ini akan dikirim ke customer sebelum transfer
                             ke agent manusia.
                           </p>
-                        </div>
+                        </div> */}
 
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
                           <p className="text-xs text-orange-800">
@@ -1886,7 +1916,7 @@ export const AgentSettingsModal = ({
                         </div>
 
                         {/* Require Category & Priority */}
-                        <div className="space-y-3">
+                        {/* <div className="space-y-3">
                           <div className="flex items-center justify-between p-4 border rounded-lg">
                             <div className="space-y-1">
                               <Label
@@ -1940,10 +1970,10 @@ export const AgentSettingsModal = ({
                               }
                             />
                           </div>
-                        </div>
+                        </div> */}
 
                         {/* Auto Close Settings */}
-                        <Card className="border-2">
+                        {/*  <Card className="border-2">
                           <CardHeader>
                             <div className="flex items-center justify-between">
                               <CardTitle className="text-base">
@@ -2006,7 +2036,7 @@ export const AgentSettingsModal = ({
                               </div>
                             </CardContent>
                           )}
-                        </Card>
+                        </Card> */}
 
                         {/* Status Lifecycle Info */}
                         <Card className="bg-muted">

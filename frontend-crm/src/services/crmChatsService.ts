@@ -473,6 +473,7 @@ export const getCustomers = async (params?: {
   search?: string;
   skip?: number;
   limit?: number;
+  channel?: string;
 }): Promise<Customer[]> => {
   const queryParams = new URLSearchParams();
   if (params?.search) queryParams.append("search", params.search);
@@ -480,12 +481,12 @@ export const getCustomers = async (params?: {
     queryParams.append("skip", params.skip.toString());
   if (params?.limit !== undefined)
     queryParams.append("limit", params.limit.toString());
+  if (params?.channel) queryParams.append("channel", params.channel);
 
   const url = `/crm/customers${
     queryParams.toString() ? `?${queryParams.toString()}` : ""
   }`;
 
-  // FIX: Fetch as object, but return only the 'customers' array
   const response = await apiClient.get<CustomersApiResponse>(url);
   return response.customers;
 };

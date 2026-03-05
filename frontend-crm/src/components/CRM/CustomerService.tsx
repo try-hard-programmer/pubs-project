@@ -1101,6 +1101,12 @@ export const CustomerService = ({
         case "chat_update":
           handleChatUpdateNotification(notification);
           break;
+
+        // ✅ ADD THESE TWO CASES:
+        case "document_upload_completed":
+        case "document_upload_failed":
+          // Do nothing globally. AgentSettingsModal handles these directly.
+          break;
         default:
           console.log("📩 Unknown notification type:", notification);
       }
@@ -1662,6 +1668,12 @@ export const CustomerService = ({
       }
 
       toast.success("Ticket berhasil diupdate");
+
+      // 🚀 THE FIX: Kick the agent back to the queue if the ticket is closed/resolved
+      if (updates.status === "closed" || updates.status === "resolved") {
+        setActiveChat(null);
+        onFilterChange("unassigned");
+      }
     } catch (error) {
       console.error("Error updating ticket:", error);
       toast.error("Gagal update ticket");

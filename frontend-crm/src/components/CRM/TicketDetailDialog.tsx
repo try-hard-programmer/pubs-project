@@ -175,6 +175,12 @@ export const TicketDetailDialog = ({
       category: editedTicket.category,
     });
     setIsEditing(false);
+    if (
+      editedTicket.status === "closed" ||
+      editedTicket.status === "resolved"
+    ) {
+      handleClose();
+    }
   };
 
   const handleClose = () => {
@@ -231,7 +237,7 @@ export const TicketDetailDialog = ({
                       <Select
                         value={editedTicket.status}
                         onValueChange={(
-                          value: "open" | "in_progress" | "resolved" | "closed"
+                          value: "open" | "in_progress" | "resolved" | "closed",
                         ) =>
                           setEditedTicket({ ...editedTicket, status: value })
                         }
@@ -263,7 +269,7 @@ export const TicketDetailDialog = ({
                       <Select
                         value={editedTicket.priority}
                         onValueChange={(
-                          value: "low" | "medium" | "high" | "urgent"
+                          value: "low" | "medium" | "high" | "urgent",
                         ) =>
                           setEditedTicket({ ...editedTicket, priority: value })
                         }
@@ -455,7 +461,7 @@ export const TicketDetailDialog = ({
                                 </p>
                                 <span className="text-xs text-muted-foreground">
                                   {new Date(
-                                    activity.created_at
+                                    activity.created_at,
                                   ).toLocaleString()}
                                 </span>
                               </div>

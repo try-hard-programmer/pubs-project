@@ -260,12 +260,14 @@ export const ChatWindow = ({
   };
 
   const humanAgents = agents.filter((agent) => {
-    console.log(agent, "<<<<<<<<<<<,");
     // 1. Only show active agents
-    // if (agent.status !== "active") return false;
+    if (agent.status !== "active") return false;
 
     // 2. TRUE HUMAN CHECK: Human agents must have a user_id!
     const isHuman = agent.userId !== null && agent.userId !== undefined;
+
+    // 3. Make sure we don't accidentally show the current AI agent
+    if (aiAgentId && agent.id === aiAgentId) return false;
 
     return isHuman;
   });
@@ -488,7 +490,7 @@ export const ChatWindow = ({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                {handledBy === "ai" && !escalatedAt && (
+                {handledBy === "ai" && (
                   <DropdownMenuItem onClick={() => setShowEscalateDialog(true)}>
                     <User className="w-4 h-4 mr-2" />
                     Escalate to Human Agent

@@ -29,7 +29,9 @@ export interface WebSocketMessage {
     | "new_message"
     | "chat_update"
     | "document_upload_completed"
-    | "document_upload_failed";
+    | "document_upload_failed"
+    | "file_upload_completed"
+    | "file_upload_failed";
   timestamp?: string;
   data?: any;
 }
@@ -103,9 +105,8 @@ export interface WebSocketChatUpdate extends WebSocketMessage {
   };
 }
 
-// NEW: Document Upload Completed Interface
 export interface WebSocketDocumentUploadCompleted extends WebSocketMessage {
-  type: "document_upload_completed";
+  type: "document_upload_completed" | "file_upload_completed";
   organization_id: string;
   agent_id: string;
   doc_id: string;
@@ -113,9 +114,9 @@ export interface WebSocketDocumentUploadCompleted extends WebSocketMessage {
   status: "completed";
 }
 
-// NEW: Document Upload Failed Interface
+// NEW: Document Upload Failed Interface (Matches flat Python payload)
 export interface WebSocketDocumentUploadFailed extends WebSocketMessage {
-  type: "document_upload_failed";
+  type: "document_upload_failed" | "file_upload_failed";
   organization_id: string;
   agent_id: string;
   doc_id: string;
@@ -414,11 +415,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
             // Create unique ID for chat updates
             messageId = `${notification.type}_${notification.data.chat_id}_${notification.timestamp}`;
           } else if (
-            // NEW: Deduplicate document upload events using the doc_id
             notification.type === "document_upload_completed" ||
             notification.type === "document_upload_failed"
           ) {
-            messageId = `${notification.type}_${notification.doc_id}`;
+            // ✅ FIX: Read doc_id directly from the notification object
+            messageId = `${notification.type}_${(notification as any).doc_id}`;
           }
 
           if (messageId) {

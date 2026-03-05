@@ -40,6 +40,7 @@ export interface AgentBackend {
  */
 export interface AgentFrontend {
   id: string;
+  userId?: string | null;
   name: string;
   email: string;
   phone: string;
@@ -290,6 +291,7 @@ export function transformAgentToFrontend(
 ): AgentFrontend {
   return {
     id: backendAgent.id,
+    userId: backendAgent.user_id,
     name: backendAgent.name,
     email: backendAgent.email,
     phone: backendAgent.phone,

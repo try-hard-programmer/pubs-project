@@ -83,13 +83,41 @@ interface ReferenceDocument {
   email?: string;
 }
 
+type UIColumn = { key: string; label: string };
+
+type UITable = {
+  type: "table";
+  title?: string | null;
+  columns: UIColumn[];
+  data: Record<string, any>[];
+};
+
+type UIText = {
+  type: "text";
+  title?: string | null;
+  text: string;
+};
+
+type UIResponse = UITable | UIText;
+
 interface Message {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  content: string; // fallback/legacy text
+  ui?: UIResponse; // NEW structured response for assistant
   reference_documents?: ReferenceDocument[];
   images?: string[];
   timestamp: Date;
+  metadata?: {
+    narrative?: any; // Table structure {type, columns, data}
+    response?: any;
+    reference_documents?: ReferenceDocument[];
+    session_id?: string;
+    agent?: string;
+    organization_id?: string;
+    num_references?: number;
+    [key: string]: any;
+  };
 }
 
 interface AIChatModalProps {
@@ -132,6 +160,149 @@ const AGENTS = [
   },
 ];
 
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = React.useState(false);
+
+  React.useEffect(() => {
+    const mql = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
+
+    setMatches(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
+}
+
+function uiToClipboardText(ui?: UIResponse, fallback?: string) {
+  if (!ui) return fallback ?? "";
+  if (ui.type === "text") return ui.text;
+
+  const headers = ui.columns.map((c) => c.label).join("\t");
+  const rows = ui.data.map((r) =>
+    ui.columns.map((c) => String(r?.[c.key] ?? "")).join("\t"),
+  );
+  return [headers, ...rows].join("\n");
+}
+
+function AssistantContent({ message }) {
+  console.log("MESSAGE FULL:", message.metadata); // Debug
+
+  // Helper: Ambil table data dari source manapun
+  const getTableData = () => {
+    // 1. Prioritas: narrative (history utama)
+    if (message.metadata?.narrative && message.metadata.narrative !== "None") {
+      return message.metadata.narrative;
+    }
+    // 2. ✅ BARU: response jika narrative kosong
+    if (
+      message.metadata?.response &&
+      message.metadata.response.type === "table"
+    ) {
+      return {
+        ...message.metadata.response,
+        data: message.metadata.response.data || [], // Pastikan ada data array
+      };
+    }
+    // 3. Fallback: ui real-time
+    if (message.ui?.type === "table") {
+      return message.ui;
+    }
+    return null;
+  };
+
+  const tableData = getTableData();
+  if (tableData) {
+    return (
+      <div className="space-y-2">
+        {tableData.title && (
+          <p className="text-sm font-medium whitespace-pre-wrap break-words">
+            {tableData.title}
+          </p>
+        )}
+        {/* Table dari metadata */}
+        <div className="w-full overflow-x-auto rounded-lg border border-border bg-background">
+          <table className="min-w-full text-sm">
+            <thead className="bg-muted">
+              <tr>
+                {tableData.columns?.map((col: UIColumn) => (
+                  <th key={col.key} className="px-3 py-2 text-left font-medium">
+                    {col.label}
+                  </th>
+                )) || <th className="px-3 py-2">Data</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {tableData.data?.map((row: any, idx: number) => (
+                <tr key={idx} className="border-t border-border">
+                  {tableData.columns?.map((col: UIColumn) => (
+                    <td key={col.key} className="px-3 py-2 align-top">
+                      {String(row?.[col.key] ?? row?.nama ?? "—")}
+                    </td>
+                  )) || <td className="px-3 py-2">{JSON.stringify(row)}</td>}
+                </tr>
+              )) || (
+                <tr>
+                  <td className="px-3 py-2 text-muted-foreground italic">
+                    No data
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* References dari metadata */}
+        {message.metadata?.referencedocuments?.length > 0 && (
+          <div className="mt-2 w-full">
+            <p className="text-xs font-medium text-muted-foreground mb-1.5">
+              Reference
+            </p>
+            {/* Render ref_docs table/list */}
+            <div className="flex flex-wrap gap-1.5">
+              {message.metadata.reference_documents.map((ref, idx) => (
+                <button
+                  key={idx}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs hover:border-primary/50 transition-colors max-w-[140px]"
+                >
+                  <span>{ref.filename}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // FALLBACK: UI response (real-time chat)
+  if (message.ui?.type === "table") {
+    const t = message.ui;
+    return (
+      <div className="space-y-2">
+        {t.title && (
+          <p className="text-sm font-medium whitespace-pre-wrap break-words">
+            {t.title}
+          </p>
+        )}
+        <div className="w-full overflow-x-auto rounded-lg border border-border bg-background">
+          <table className="min-w-full text-sm">
+            {/* Existing table logic... */}
+          </table>
+        </div>
+      </div>
+    );
+  }
+
+  // Text fallback
+  return (
+    <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+      {message.content}
+    </p>
+  );
+}
+
 export const AIChatModal = ({
   open,
   onOpenChange,
@@ -148,9 +319,9 @@ export const AIChatModal = ({
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [expandedRefs, setExpandedRefs] = useState<Record<string, boolean>>({});
-  const isDesktop = useMediaQuery("(min-width: 768px)"); // md breakpoint default Tailwind [web:63]
-  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false); // khusus mobile drawer
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false); // khusus desktop collapse
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = React.useState(false);
 
   // Chat history states (API-based)
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -158,13 +329,13 @@ export const AIChatModal = ({
   const [isLoadingTopics, setIsLoadingTopics] = useState(false);
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isCreatingTopic, setIsCreatingTopic] = useState(false);
-  const [isTemporarySession, setIsTemporarySession] = useState(false); // True jika sedang di temporary session (frontend only)
-  const [skipNextLoad, setSkipNextLoad] = useState(false); // Flag to skip loading messages after sending
-  const activeTopicIdRef = useRef<string | null>(null); // Ref to track active topic without causing re-render
+  const [isTemporarySession, setIsTemporarySession] = useState(false);
+  const [skipNextLoad, setSkipNextLoad] = useState(false);
+  const activeTopicIdRef = useRef<string | null>(null);
   const [activeTopicForHighlight, setActiveTopicForHighlight] = useState<
     string | null
-  >(null); // For sidebar highlight only
-  const isCreatingTopicRef = useRef<boolean>(false); // Flag to prevent clearing messages during topic creation
+  >(null);
+  const isCreatingTopicRef = useRef<boolean>(false);
   const [conversationLoading, setConversationLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deletingTopicId, setDeletingTopicId] = useState<string | null>(null);
@@ -173,45 +344,22 @@ export const AIChatModal = ({
     undefined,
   );
 
+  const { toast } = useToast();
   const { files, error } = useFiles("all", null, "name", "asc");
 
-  function useMediaQuery(query: string) {
-    const [matches, setMatches] = React.useState(false);
-
-    React.useEffect(() => {
-      const mql = window.matchMedia(query);
-      const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
-
-      setMatches(mql.matches);
-      mql.addEventListener("change", onChange);
-      return () => mql.removeEventListener("change", onChange);
-    }, [query]);
-
-    return matches;
-  }
-
-  // Desktop: sidebar dianggap "open" selalu; Mobile: default closed
+  // Desktop: sidebar considered open always; Mobile: default closed
   React.useEffect(() => {
     if (isDesktop) {
-      setIsSidebarOpen(true); // desktop selalu “open” (tidak off-canvas)
+      setIsSidebarOpen(true);
     } else {
-      setIsSidebarOpen(false); // mobile default tertutup
-      setIsSidebarCollapsed(false); // reset biar tidak aneh saat pindah mode
+      setIsSidebarOpen(false);
+      setIsSidebarCollapsed(false);
     }
   }, [isDesktop]);
 
-  // State untuk toggle expanded per message
-  const toggleRefsView = (messageId: string) => {
-    setExpandedRefs((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
-  };
-
-  // Helper: menentukan apakah perlu tombol "..." (misal jika jumlah > 2)
+  // Helper: show "more" button for references
   const shouldShowMore = (itemsLen: number, isExpanded: boolean) =>
     !isExpanded && itemsLen > 3;
-
-  const { toast } = useToast();
-  // ❌ BLEED STOPPED: Comment out the unused hook
-  // const { files } = useFiles();
 
   // Load topics from API on mount
   useEffect(() => {
@@ -222,15 +370,13 @@ export const AIChatModal = ({
         setIsLoadingTopics(true);
         const fetchedTopics = await ChatHistoryService.getTopics();
 
-        // Debug log
-        console.log("Fetched topics:", fetchedTopics);
+        console.log("[Topics] fetched:", fetchedTopics);
 
-        // Validation: pastikan response adalah array
         if (Array.isArray(fetchedTopics)) {
           setTopics(fetchedTopics);
         } else {
-          console.error("Topics response is not an array:", fetchedTopics);
-          setTopics([]); // Fallback ke empty array
+          console.error("[Topics] invalid response:", fetchedTopics);
+          setTopics([]);
           toast({
             title: "Warning",
             description: "Invalid topics response format",
@@ -238,8 +384,8 @@ export const AIChatModal = ({
           });
         }
       } catch (error) {
-        console.error("Failed to load topics:", error);
-        setTopics([]); // Fallback ke empty array on error
+        console.error("[Topics] failed:", error);
+        setTopics([]);
         toast({
           title: "Error",
           description: "Failed to load chat history",
@@ -253,88 +399,73 @@ export const AIChatModal = ({
     loadTopics();
   }, [open, toast]);
 
-  // Load messages when topic changes (only for real topics, not temporary)
+  // Load messages when topic changes
   useEffect(() => {
     const loadMessages = async () => {
-      // CRITICAL FIRST: Don't do ANYTHING if we're in the process of creating a topic
-      // This prevents the race condition where messages get cleared before API response arrives
-      // Check this BEFORE any other conditions!
       if (isCreatingTopicRef.current) {
-        console.log(
-          "[Load Messages] Topic creation in progress, skipping to preserve messages",
-        );
+        console.log("[Load Messages] topic creation in progress, skipping");
         return;
       }
 
-      // Skip if flag is set (after sending message)
       if (skipNextLoad) {
-        console.log("[Load Messages] Skipping load (skipNextLoad flag set)");
+        console.log("[Load Messages] skipping (skipNextLoad)");
         setSkipNextLoad(false);
         return;
       }
 
-      // Don't load messages if we're in temporary session
       if (isTemporarySession) {
-        console.log("[Load Messages] Temporary session, skipping API call");
+        console.log("[Load Messages] temporary session, skipping");
         return;
       }
 
-      // Don't load messages if we're creating a new topic (activeTopicIdRef has value but currentTopicId is null)
-      // This prevents clearing messages when transitioning from temporary to real topic
       if (!currentTopicId && activeTopicIdRef.current) {
-        console.log(
-          "[Load Messages] Topic being created, skipping to prevent clearing messages",
-        );
+        console.log("[Load Messages] topic being created, skipping");
         return;
       }
 
       if (!currentTopicId) {
-        console.log("[Load Messages] No currentTopicId, clearing messages");
+        console.log("[Load Messages] no currentTopicId, clearing messages");
         setMessages([]);
         return;
       }
 
-      console.log(
-        "[Load Messages] Loading messages for topic:",
-        currentTopicId,
-      );
+      console.log("[Load Messages] loading for topic:", currentTopicId);
 
       try {
         setIsLoadingMessages(true);
         const fetchedMessages =
           await ChatHistoryService.getMessages(currentTopicId);
 
-        console.log(
-          "[Load Messages] Fetched messages:",
-          fetchedMessages.length,
-        );
+        console.log("[Load Messages] fetched count:", fetchedMessages.length);
 
-        // Convert API messages to UI messages
-        const uiMessages: Message[] = fetchedMessages.map((msg) => {
-          // Extract reference_documents from API response
-          const referenceDocuments: ReferenceDocument[] =
-            msg.reference_documents || [];
+        const uiMessages: Message[] = fetchedMessages.map((msg: any) => {
+          const referenceDocumentsRaw: ReferenceDocument[] = Array.isArray(
+            msg.reference_documents,
+          )
+            ? msg.reference_documents
+            : [];
 
-          console.log("[Load Messages] Processing message:", msg.id);
-          console.log(
-            "[Load Messages] reference_documents:",
-            referenceDocuments,
+          const referenceDocuments: ReferenceDocument[] = uniqReferences(
+            referenceDocumentsRaw,
+            "file",
           );
-
+          console.log("LOAD REFERENCES : ", referenceDocuments);
           return {
             id: msg.id,
             role: msg.role,
             content: msg.content,
+            metadata: msg.metadata,
+            // Real-time UI (jika ada)
+            ui: msg.ui_response ?? undefined,
             reference_documents: referenceDocuments,
             images: msg.metadata?.images,
             timestamp: new Date(msg.created_at),
           };
         });
 
-        console.log("[Load Messages] Setting UI messages:", uiMessages.length);
         setMessages(uiMessages);
       } catch (error) {
-        console.error("[Load Messages] Failed to load messages:", error);
+        console.error("[Load Messages] failed:", error);
         toast({
           title: "Error",
           description: "Failed to load messages",
@@ -348,14 +479,13 @@ export const AIChatModal = ({
     loadMessages();
   }, [currentTopicId, isTemporarySession, skipNextLoad, toast]);
 
-  // Create new chat - start temporary session (frontend only)
+  // Create new chat - start temporary session
   const createNewChat = () => {
-    console.log("[New Chat] Starting temporary session");
-    // Set temporary session flag - no API call yet
+    console.log("[New Chat] temporary session");
     setIsTemporarySession(true);
     setCurrentTopicId(null);
-    activeTopicIdRef.current = null; // Clear ref
-    setActiveTopicForHighlight(null); // Clear highlight
+    activeTopicIdRef.current = null;
+    setActiveTopicForHighlight(null);
     setMessages([]);
     setInput("");
     setImages([]);
@@ -372,12 +502,9 @@ export const AIChatModal = ({
         setMessages([]);
       }
 
-      toast({
-        title: "Success",
-        description: "Chat deleted",
-      });
+      toast({ title: "Success", description: "Chat deleted" });
     } catch (error) {
-      console.error("Failed to delete chat:", error);
+      console.error("[Delete Chat] failed:", error);
       toast({
         title: "Error",
         description: "Failed to delete chat",
@@ -389,40 +516,33 @@ export const AIChatModal = ({
   // Initialize temporary session when modal opens
   useEffect(() => {
     if (open && !isLoadingTopics) {
-      // Jangan reset kalau sudah ada pesan (optimistic UI)
       if (messages.length > 0) return;
-
-      // Jangan reset saat sedang create topic / sending
       if (isCreatingTopicRef.current || isLoading) return;
-      // If no topic selected, start temporary session
+
       if (!currentTopicId && !isTemporarySession) {
-        console.log(
-          "[Modal Open] No topic selected, starting temporary session",
-        );
+        console.log("[Modal Open] starting temporary session");
         setIsTemporarySession(true);
-        // setMessages([]);
       }
     }
 
     if (!open) {
-      // Clear state on modal close
-      console.log("[Modal] Closing, clearing state");
+      console.log("[Modal] closing, clearing state");
       setInput("");
       setImages([]);
       setIsLoading(false);
       setIsTemporarySession(false);
-      activeTopicIdRef.current = null; // Clear ref on close
-      setActiveTopicForHighlight(null); // Clear highlight on close
+      activeTopicIdRef.current = null;
+      setActiveTopicForHighlight(null);
       setMessages([]);
     }
   }, [open, currentTopicId, isTemporarySession, isLoadingTopics]);
 
-  // Auto scroll to bottom when new messages are added
+  // Auto scroll to bottom
   useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector(
         "[data-radix-scroll-area-viewport]",
-      );
+      ) as HTMLElement | null;
       if (scrollElement) {
         scrollElement.scrollTop = scrollElement.scrollHeight;
       }
@@ -455,6 +575,48 @@ export const AIChatModal = ({
     setImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handlePreview = async (file_id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    files.forEach((f: any) => {
+      if (f.id === file_id) setPreviewFile(f);
+    });
+  };
+
+  const handleCopy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      notify.success("Berhasil disalin");
+    } catch (e) {
+      notify.error("Gagal menyalin");
+    }
+  };
+
+  const handleConfirmDeleteChat = async () => {
+    if (!deletingTopicId) return;
+    try {
+      setDeleting(true);
+      await deleteChat(deletingTopicId);
+    } finally {
+      setDeleting(false);
+      setDeletingTopicId(null);
+    }
+  };
+
+  function uniqReferences(
+    refs: ReferenceDocument[],
+    mode: "file" | "chunk" = "file",
+  ): ReferenceDocument[] {
+    const m = new Map<string, ReferenceDocument>();
+
+    for (const r of refs) {
+      if (!r?.file_id) continue;
+      const key = mode === "file" ? r.file_id : `${r.file_id}:${r.chunk_index}`;
+      if (!m.has(key)) m.set(key, r); // keep first occurrence
+    }
+
+    return Array.from(m.values());
+  }
+
   const handleSend = async () => {
     if (!input.trim() && images.length === 0) return;
 
@@ -466,7 +628,7 @@ export const AIChatModal = ({
       timestamp: new Date(),
     };
 
-    const userQuery = input; // Save before clearing
+    const userQuery = input;
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setImages([]);
@@ -484,105 +646,91 @@ export const AIChatModal = ({
         setConversationLoading(true);
         console.log("[First Message] Creating topic with title from query");
         try {
-          // Set flag to prevent useEffect from clearing messages
           isCreatingTopicRef.current = true;
-
-          // Exit temporary session IMMEDIATELY to prevent useEffect from running
-          // when we update highlight later
           setIsTemporarySession(false);
 
-          // Generate title from first 25 characters of the question
           const newTitle =
             userQuery.slice(0, 25) + (userQuery.length > 25 ? "..." : "");
-
-          // Create topic with the generated title
           const newTopic = await ChatHistoryService.createTopic(newTitle);
-          console.log("[First Message] Topic created:", newTopic.id);
 
-          // Store in ref to avoid component re-render
           activeTopicIdRef.current = newTopic.id;
-
-          // Update local topics state (add to sidebar) WITHOUT causing component reload
           setTopics((prev) => [newTopic, ...prev]);
 
           topicId = newTopic.id;
         } catch (error) {
-          console.error("[First Message] Failed to create topic:", error);
+          console.error("[First Message] createTopic failed:", error);
           toast({
             title: "Error",
             description: "Failed to create chat topic",
             variant: "destructive",
           });
           setIsLoading(false);
-          isCreatingTopicRef.current = false; // Reset flag on error
-          setIsTemporarySession(true); // Restore temporary session on error
+          isCreatingTopicRef.current = false;
+          setIsTemporarySession(true);
           return;
         }
       } else {
-        console.log("[Subsequent Message] Using existing topic:", topicId);
+        console.log("[Subsequent Message] using existing topic:", topicId);
       }
 
-      // Send to agent with topic_id - backend akan auto save conversation
-      const data = await ChatHistoryService.askAgent(
+      const data: any = await ChatHistoryService.askAgent(
         userQuery,
         topicId,
-        true, // save_history = true
+        true, // save_history
       );
 
+      console.log("[Agent Response] raw:", data);
       setConversationLoading(false);
-      // Validasi minimal
-      const answer = data?.answer ?? "Tidak ada jawaban dari server.";
-      const referenceDocuments: ReferenceDocument[] = Array.isArray(
+
+      // NEW contract: data.response (structured)
+      const ui: UIResponse | undefined = data?.response;
+
+      // Legacy fallback
+      const answerText: string =
+        (ui?.type === "text" ? ui.text : "") ||
+        data?.answer ||
+        "Tidak ada jawaban dari server.";
+
+      const referenceDocumentsRaw: ReferenceDocument[] = Array.isArray(
         data?.reference_documents,
       )
         ? data.reference_documents
-        : [];
-      console.log("[Agent Response] reference_documents:", referenceDocuments);
+        : Array.isArray(data?.referencedocuments)
+          ? data.referencedocuments
+          : [];
+
+      const referenceDocuments: ReferenceDocument[] = uniqReferences(
+        referenceDocumentsRaw,
+        "file",
+      );
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: answer,
+        content: answerText,
+        ui: ui,
         reference_documents: referenceDocuments,
         timestamp: new Date(),
       };
 
-      console.log(
-        "[Agent Response] assistant message created:",
-        assistantMessage,
-      );
-
-      // Add assistant message directly to UI with reference documents from agent response
-      // This is more reliable than refetching from API which might have race condition
-      console.log(
-        "[Agent Response] Adding assistant message to UI with references",
-      );
       setMessages((prev) => [...prev, assistantMessage]);
 
-      console.log("MESSAGE KEDUA ", messages);
-
-      // Only update UI state if this was the first message (topic just created)
       if (shouldCreateTopic && activeTopicIdRef.current) {
         setSkipNextLoad(true);
-        console.log("[First Message] Topic created, updating UI state");
         setActiveTopicForHighlight(activeTopicIdRef.current);
-        // Update currentTopicId to sync with the newly created topic
         setCurrentTopicId(activeTopicIdRef.current);
-        // Reset the flag after successfully updating topic
         isCreatingTopicRef.current = false;
       }
     } catch (error) {
-      console.error("Error sending message:", error);
+      console.error("[Send] error:", error);
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
         variant: "destructive",
       });
-      // Reset the flag on error as well
       isCreatingTopicRef.current = false;
     } finally {
       setIsLoading(false);
-      // Auto-focus textarea after agent responds so user can type immediately
       setTimeout(() => {
         textareaRef.current?.focus();
       }, 100);
@@ -627,35 +775,6 @@ export const AIChatModal = ({
         description: "File download started",
         variant: "destructive",
       });
-    }
-  };
-  const handlePreview = async (file_id: string, e: React.MouseEvent) => {
-    console.log("FILES ", files);
-    e.stopPropagation();
-    files.forEach((f) => {
-      if (f.id === file_id) {
-        setPreviewFile(f);
-      }
-    });
-  };
-
-  const handleCopy = async (messages: string) => {
-    try {
-      await navigator.clipboard.writeText(messages);
-      notify.success("Berhasil disalin");
-    } catch (e) {
-      notify.error("Gagal menyalin");
-    }
-  };
-
-  const handleConfirmDeleteChat = async () => {
-    if (!deletingTopicId) return;
-    try {
-      setDeleting(true);
-      await deleteChat(deletingTopicId); // fungsi yang sudah ada di file
-    } finally {
-      setDeleting(false);
-      setDeletingTopicId(null);
     }
   };
 
@@ -715,13 +834,13 @@ export const AIChatModal = ({
 
           <aside
             className={`
-              flex flex-col bg-background border-r border-border
-              transition-all duration-300 ease-in-out
+              flex flex-col bg-background border-r border-border transition-all duration-300 ease-in-out
               ${
                 isDesktop
                   ? `relative shrink-0 ${isSidebarCollapsed ? "w-34" : "w-64 lg:w-72"}`
-                  : `fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] shadow-2xl
-                   ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"}`
+                  : `fixed inset-y-0 left-0 z-50 w-[280px] max-w-[85vw] shadow-2xl ${
+                      isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+                    }`
               }
             `}
           >
@@ -793,8 +912,7 @@ export const AIChatModal = ({
                     <div
                       key={topic.id}
                       className={`
-                        group relative rounded-lg border cursor-pointer
-                        transition-colors duration-150
+                        group relative rounded-lg border cursor-pointer transition-colors duration-150
                         ${
                           currentTopicId === topic.id ||
                           activeTopicForHighlight === topic.id
@@ -838,8 +956,8 @@ export const AIChatModal = ({
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 
-                                     hover:bg-destructive/10 hover:text-destructive transition-opacity"
+                        className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100
+                                   hover:bg-destructive/10 hover:text-destructive transition-opacity"
                         onClick={(e) => {
                           e.stopPropagation();
                           setDeletingTopicId(topic.id);
@@ -942,9 +1060,13 @@ export const AIChatModal = ({
                               </div>
                             )}
 
-                            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
-                              {message.content}
-                            </p>
+                            {message.role === "assistant" ? (
+                              <AssistantContent message={message} />
+                            ) : (
+                              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+                                {message.content}
+                              </p>
+                            )}
 
                             <p
                               className={`text-[10px] sm:text-xs mt-1.5 opacity-60 ${
@@ -968,7 +1090,8 @@ export const AIChatModal = ({
                                   {(() => {
                                     const isExpanded =
                                       !!expandedRefs[message.id];
-                                    const items = message.reference_documents;
+                                    const items =
+                                      message.reference_documents || [];
                                     const displayItems = isExpanded
                                       ? items
                                       : items.slice(0, 3);
@@ -982,8 +1105,8 @@ export const AIChatModal = ({
                                             onClick={(e) =>
                                               handlePreview(ref.file_id, e)
                                             }
-                                            className="inline-flex items-center gap-1.5 rounded-md border border-border 
-                                                       bg-background px-2 py-1 text-xs hover:border-primary/50 
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-border
+                                                       bg-background px-2 py-1 text-xs hover:border-primary/50
                                                        transition-colors max-w-[140px] sm:max-w-[180px]"
                                           >
                                             <span>📄</span>
@@ -992,6 +1115,7 @@ export const AIChatModal = ({
                                             </span>
                                           </button>
                                         ))}
+
                                         {shouldShowMore(
                                           items.length,
                                           isExpanded,
@@ -1010,6 +1134,7 @@ export const AIChatModal = ({
                                             +{items.length - 3} more
                                           </Button>
                                         )}
+
                                         {isExpanded && items.length > 3 && (
                                           <Button
                                             variant="ghost"
@@ -1038,7 +1163,14 @@ export const AIChatModal = ({
                                 variant="ghost"
                                 size="icon"
                                 className="h-6 w-6"
-                                onClick={() => handleCopy(message.content)}
+                                onClick={() =>
+                                  handleCopy(
+                                    uiToClipboardText(
+                                      message.ui,
+                                      message.content,
+                                    ),
+                                  )
+                                }
                               >
                                 <Copy className="h-3 w-3" />
                               </Button>
@@ -1095,8 +1227,7 @@ export const AIChatModal = ({
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute -top-1.5 -right-1.5 h-5 w-5 opacity-0 group-hover:opacity-100 
-                                   transition-opacity shadow-sm"
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
                         onClick={() => removeImage(idx)}
                       >
                         <X className="h-3 w-3" />
@@ -1124,8 +1255,7 @@ export const AIChatModal = ({
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyPress}
                   disabled={isLoading}
-                  className="flex-1 min-h-[36px] sm:min-h-[40px] max-h-32 resize-none py-2 px-3 
-                             text-sm sm:text-base rounded-xl border-border"
+                  className="flex-1 min-h-[36px] sm:min-h-[40px] max-h-32 resize-none py-2 px-3 text-sm sm:text-base rounded-xl border-border"
                   rows={1}
                 />
 
@@ -1151,19 +1281,21 @@ export const AIChatModal = ({
           </div>
         </div>
       </DialogContent>
+
       <ConfirmDeleteChatDialog
         open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) {
+        onOpenChange={(o) => {
+          if (!o) {
             setDeletingTopicId(null);
             setDeletingTitle(undefined);
           }
-          setDeleteDialogOpen(open);
+          setDeleteDialogOpen(o);
         }}
         onConfirm={handleConfirmDeleteChat}
         loading={deleting}
         topicTitle={deletingTitle}
       />
+
       <FilePreview
         file={previewFile}
         isOpen={!!previewFile}
