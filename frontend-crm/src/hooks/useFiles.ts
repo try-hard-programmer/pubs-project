@@ -35,7 +35,7 @@ export const useFiles = (
     | "all",
   currentFolderId?: string | null,
   sortBy?: "name" | "size" | "created_at",
-  sortOrder?: "asc" | "desc"
+  sortOrder?: "asc" | "desc",
 ) => {
   const { user } = useAuth();
   console.log("user", user);
@@ -65,14 +65,14 @@ export const useFiles = (
           filter === "starred"
             ? { is_starred: true, is_trashed: false }
             : filter === "trashed"
-            ? { is_trashed: true }
-            : filter === "images" ||
-              filter === "documents" ||
-              filter === "videos"
-            ? { type: "file", is_trashed: false }
-            : filter === "shared"
-            ? {}
-            : { is_trashed: false };
+              ? { is_trashed: true }
+              : filter === "images" ||
+                  filter === "documents" ||
+                  filter === "videos"
+                ? { type: "file", is_trashed: false }
+                : filter === "shared"
+                  ? {}
+                  : { is_trashed: false };
 
         // Ambil data: bedakan shared vs non-shared
         let rawItems: any[] = [];
@@ -115,22 +115,22 @@ export const useFiles = (
           filter === "images"
             ? rawItems.filter((f) => f.mime_type?.startsWith("image/"))
             : filter === "videos"
-            ? rawItems.filter((f) => f.mime_type?.startsWith("video/"))
-            : filter === "documents"
-            ? rawItems.filter((f) => {
-                const mime = (f.mime_type || "").toLowerCase();
-                return (
-                  mime.includes("pdf") ||
-                  mime.includes("document") ||
-                  mime.includes("word") ||
-                  mime.includes("text") ||
-                  mime.includes("excel") ||
-                  mime.includes("spreadsheet") ||
-                  mime.includes("powerpoint") ||
-                  mime.includes("presentation")
-                );
-              })
-            : rawItems;
+              ? rawItems.filter((f) => f.mime_type?.startsWith("video/"))
+              : filter === "documents"
+                ? rawItems.filter((f) => {
+                    const mime = (f.mime_type || "").toLowerCase();
+                    return (
+                      mime.includes("pdf") ||
+                      mime.includes("document") ||
+                      mime.includes("word") ||
+                      mime.includes("text") ||
+                      mime.includes("excel") ||
+                      mime.includes("spreadsheet") ||
+                      mime.includes("powerpoint") ||
+                      mime.includes("presentation")
+                    );
+                  })
+                : rawItems;
 
         // Map API response to our FileItem interface
         const mappedFiles = itemsAfterMime.map((item: any) => ({
@@ -275,7 +275,7 @@ export const useFiles = (
       // Upload file via API
       const fileData = await fileManagerApi.uploadFile(
         file,
-        currentFolderId || null
+        currentFolderId || null,
       );
 
       console.log("File uploaded successfully:", fileData);
@@ -438,11 +438,17 @@ export const useFiles = (
     mutationFn: async ({
       fileId,
       folderId,
+      is_folder,
     }: {
       fileId: string;
       folderId: string | null;
+      is_folder: boolean;
     }) => {
-      return await fileManagerApi.moveFile(fileId, folderId);
+      if (is_folder) {
+        return await fileManagerApi.moveFolder(fileId, folderId);
+      } else {
+        return await fileManagerApi.moveFile(fileId, folderId);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["files"] });
@@ -503,7 +509,7 @@ export const useFiles = (
         share_id,
         access_level,
         expires_at,
-        metadata
+        metadata,
       );
     },
     onSuccess: () => {
@@ -535,7 +541,7 @@ export const useFiles = (
       const result = await fileManagerApi.publicShareFile(
         file_id,
         permission,
-        expires_in_hours
+        expires_in_hours,
       );
       return result;
     },

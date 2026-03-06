@@ -84,7 +84,7 @@ export const Sidebar = ({
     onCollapseChange?.(newState);
   };
 
-  const userCredits = { remaining: 653, total: 1000 };
+  const userCredits = { remaining: 0, total: 0 };
 
   return (
     <aside
@@ -236,7 +236,8 @@ export const Sidebar = ({
                 : ""
             }`}
             onClick={() => {
-              navigate("/");
+              // Pass the target section in memory using React Router's state
+              navigate("/files", { state: { targetSection: item.key } });
               onSectionChange(item.key);
             }}
           >

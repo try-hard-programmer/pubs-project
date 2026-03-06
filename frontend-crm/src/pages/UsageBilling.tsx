@@ -142,17 +142,6 @@ export const UsageBilling = () => {
     Math.ceil((resetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)),
   );
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-          <p className="text-muted-foreground">Loading billing data...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <>
       <Sidebar
@@ -197,406 +186,438 @@ export const UsageBilling = () => {
                 </div>
               </div>
             </div>
-
-            {/* Current Plan Overview */}
-            {plan && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <Card className="border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-lg bg-blue-500/10">
-                        <Zap className="w-6 h-6 text-blue-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Current Plan
-                        </p>
-                        <p className="text-xl font-bold text-foreground">
-                          {plan.plan_name}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-lg bg-green-500/10">
-                        <TrendingUp className="w-6 h-6 text-green-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Credits
-                        </p>
-                        <p className="text-xl font-bold text-foreground">
-                          {plan.total_credits.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-lg bg-purple-500/10">
-                        <TrendingDown className="w-6 h-6 text-purple-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Used Credits
-                        </p>
-                        <p className="text-xl font-bold text-foreground">
-                          {plan.used_credits.toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border">
-                  <CardContent className="p-6">
-                    <div className="flex items-center gap-4">
-                      <div className="p-3 rounded-lg bg-orange-500/10">
-                        <DollarSign className="w-6 h-6 text-orange-500" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total Spent
-                        </p>
-                        <p className="text-xl font-bold text-foreground">
-                          ${stats?.total_spent.toFixed(2) || "0.00"}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+            {/* ADD THE CHECK HERE */}
+            {isLoading ? (
+              <div className="h-[80vh] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                  <RefreshCw className="w-8 h-8 text-primary animate-spin" />
+                  <p className="text-muted-foreground">
+                    Loading billing data...
+                  </p>
+                </div>
               </div>
-            )}
+            ) : (
+              <>
+                {/* Current Plan Overview */}
+                {plan && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <Card className="border-border">
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-lg bg-blue-500/10">
+                            <Zap className="w-6 h-6 text-blue-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Current Plan
+                            </p>
+                            <p className="text-xl font-bold text-foreground">
+                              {plan.plan_name}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-            {/* Credit Balance */}
-            {plan && (
-              <Card className="border-border">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle>Credit Balance</CardTitle>
-                      <CardDescription className="mt-1">
-                        Your current credit usage and remaining balance
-                      </CardDescription>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="flex items-center gap-1"
-                    >
-                      <Calendar className="w-3 h-3" />
-                      Resets in {daysUntilReset} days
-                    </Badge>
+                    <Card className="border-border">
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-lg bg-green-500/10">
+                            <TrendingUp className="w-6 h-6 text-green-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Total Credits
+                            </p>
+                            <p className="text-xl font-bold text-foreground">
+                              {plan.total_credits.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-border">
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-lg bg-purple-500/10">
+                            <TrendingDown className="w-6 h-6 text-purple-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Used Credits
+                            </p>
+                            <p className="text-xl font-bold text-foreground">
+                              {plan.used_credits.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-border">
+                      <CardContent className="p-6">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-lg bg-orange-500/10">
+                            <DollarSign className="w-6 h-6 text-orange-500" />
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">
+                              Total Spent
+                            </p>
+                            <p className="text-xl font-bold text-foreground">
+                              ${stats?.total_spent.toFixed(2) || "0.00"}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        Credits Used
-                      </span>
-                      <span className="font-semibold text-foreground">
-                        {plan.used_credits.toLocaleString()} /{" "}
-                        {plan.total_credits.toLocaleString()}
-                      </span>
-                    </div>
-                    <Progress value={usagePercentage} className="h-3" />
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-muted-foreground">
-                        {Math.round(usagePercentage)}% used
-                      </span>
-                      <span className="text-green-600 font-medium">
-                        {remainingCredits.toLocaleString()} credits remaining
-                      </span>
-                    </div>
-                  </div>
+                )}
 
-                  {usagePercentage > 80 && (
-                    <div className="flex items-center gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
-                      <AlertCircle className="w-4 h-4 text-orange-500" />
-                      <p className="text-sm text-orange-600">
-                        You've used {Math.round(usagePercentage)}% of your
-                        monthly credits. Consider upgrading your plan.
-                      </p>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border">
-                    <div>
-                      <h4 className="text-sm font-medium text-foreground mb-3">
-                        Credit Pricing Guide
-                      </h4>
-                      <div className="space-y-2">
-                        {Object.entries(creditPricing).map(([key, pricing]) => {
-                          const Icon = pricing.icon;
-                          return (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50"
-                            >
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className={`p-1.5 rounded ${pricing.bgColor}`}
-                                >
-                                  <Icon
-                                    className={`w-3 h-3 ${pricing.color}`}
-                                  />
-                                </div>
-                                <span className="text-sm text-foreground">
-                                  {pricing.name}
-                                </span>
-                              </div>
-                              <Badge variant="outline" className="text-xs">
-                                {pricing.credits}{" "}
-                                {pricing.credits === 1 ? "credit" : "credits"}
-                              </Badge>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h4 className="text-sm font-medium text-foreground mb-3">
-                        Usage Breakdown
-                      </h4>
-                      <div className="space-y-3">
-                        {stats?.by_type &&
-                          Object.entries(stats.by_type).map(([key, amount]) => {
-                            const pricing =
-                              creditPricing[key] || creditPricing.basic_query;
-                            const Icon = pricing.icon;
-                            const percentage =
-                              stats.total_spent > 0
-                                ? (amount / stats.total_spent) * 100
-                                : 0;
-
-                            return (
-                              <div key={key} className="space-y-1">
-                                <div className="flex items-center justify-between text-xs">
-                                  <div className="flex items-center gap-2">
-                                    <Icon
-                                      className={`w-3 h-3 ${pricing.color}`}
-                                    />
-                                    <span className="text-muted-foreground">
-                                      {pricing.name}
-                                    </span>
-                                  </div>
-                                  <span className="font-medium text-foreground">
-                                    ${amount.toFixed(2)} spent
-                                  </span>
-                                </div>
-                                <Progress
-                                  value={percentage}
-                                  className="h-1.5"
-                                />
-                              </div>
-                            );
-                          })}
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Tabs for Usage History and Billing */}
-            <Tabs defaultValue="usage" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-grid">
-                <TabsTrigger value="usage">Usage History</TabsTrigger>
-                <TabsTrigger value="billing">Billing History</TabsTrigger>
-              </TabsList>
-
-              {/* Usage History Tab */}
-              <TabsContent value="usage" className="mt-6">
-                <Card className="border-border">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Recent Usage</CardTitle>
-                        <CardDescription className="mt-1">
-                          Your AI query history and credit consumption
-                        </CardDescription>
-                      </div>
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Download className="w-4 h-4" />
-                        Export
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {usageHistory.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">
-                          No usage history found.
-                        </p>
-                      ) : (
-                        usageHistory.map((usage) => {
-                          // Try to map to the correct pricing tier, fallback to basic_query
-                          const queryType =
-                            usage.metadata?.query_type || "basic_query";
-                          const pricing =
-                            creditPricing[queryType] ||
-                            creditPricing.basic_query;
-                          const Icon = pricing.icon;
-                          const usageDate = new Date(usage.created_at);
-
-                          return (
-                            <div
-                              key={usage.id}
-                              className="flex items-start gap-4 p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                            >
-                              <div
-                                className={`p-2 rounded-lg ${pricing.bgColor} flex-shrink-0`}
-                              >
-                                <Icon className={`w-4 h-4 ${pricing.color}`} />
-                              </div>
-
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-1">
-                                  <Badge variant="outline" className="text-xs">
-                                    {pricing.name}
-                                  </Badge>
-                                  <span className="text-xs text-muted-foreground">
-                                    {usageDate.toLocaleDateString()} at{" "}
-                                    {usageDate.toLocaleTimeString([], {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    })}
-                                  </span>
-                                </div>
-                                <p className="text-sm text-foreground line-clamp-1 mb-2">
-                                  {usage.description}
-                                </p>
-                                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                  <div className="flex items-center gap-1 capitalize">
-                                    <Brain className="w-3 h-3" />
-                                    Provider:{" "}
-                                    {usage.metadata?.provider || "System"}
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <CheckCircle className="w-3 h-3 text-green-500" />
-                                    completed
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="text-right flex-shrink-0">
-                                {/* Backend amounts for usage are negative, we use Math.abs to display the magnitude */}
-                                <div className="text-lg font-bold text-foreground">
-                                  {Math.abs(usage.amount).toLocaleString()}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {Math.abs(usage.amount) === 1
-                                    ? "credit"
-                                    : "credits"}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-
-                    {usageHistory.length > 0 && (
-                      <div className="mt-6 text-center">
-                        <Button
+                {/* Credit Balance */}
+                {plan && (
+                  <Card className="border-border">
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <CardTitle>Credit Balance</CardTitle>
+                          <CardDescription className="mt-1">
+                            Your current credit usage and remaining balance
+                          </CardDescription>
+                        </div>
+                        <Badge
                           variant="outline"
-                          className="gap-2"
-                          onClick={loadBillingData}
+                          className="flex items-center gap-1"
                         >
-                          <RefreshCw className="w-4 h-4" />
-                          Refresh List
-                        </Button>
+                          <Calendar className="w-3 h-3" />
+                          Resets in {daysUntilReset} days
+                        </Badge>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              {/* Billing History Tab */}
-              <TabsContent value="billing" className="mt-6">
-                <Card className="border-border">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Billing History</CardTitle>
-                        <CardDescription className="mt-1">
-                          Your payment history and invoices
-                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            Credits Used
+                          </span>
+                          <span className="font-semibold text-foreground">
+                            {plan.used_credits.toLocaleString()} /{" "}
+                            {plan.total_credits.toLocaleString()}
+                          </span>
+                        </div>
+                        <Progress value={usagePercentage} className="h-3" />
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">
+                            {Math.round(usagePercentage)}% used
+                          </span>
+                          <span className="text-green-600 font-medium">
+                            {remainingCredits.toLocaleString()} credits
+                            remaining
+                          </span>
+                        </div>
                       </div>
-                      <Button variant="outline" size="sm" className="gap-2">
-                        <Download className="w-4 h-4" />
-                        Download All
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {billingHistory.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-6">
-                          No billing history found.
-                        </p>
-                      ) : (
-                        billingHistory.map((bill) => {
-                          const billDate = new Date(bill.created_at);
 
-                          return (
-                            <div
-                              key={bill.id}
-                              className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
-                            >
-                              <div className="flex items-center gap-4">
-                                <div className="p-2 rounded-lg bg-green-500/10">
-                                  <CheckCircle className="w-5 h-5 text-green-500" />
-                                </div>
-                                <div>
-                                  <p className="font-medium text-foreground">
-                                    {bill.description}
-                                  </p>
-                                  <p className="text-sm text-muted-foreground">
-                                    {billDate.toLocaleDateString()}
-                                  </p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-6">
-                                <div className="text-right">
-                                  {/* Showing top-up magnitude */}
-                                  <p className="font-semibold text-green-500">
-                                    +{bill.amount.toLocaleString()}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    credits added
-                                  </p>
-                                </div>
-                                <Badge variant="default" className="capitalize">
-                                  paid
-                                </Badge>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="gap-2"
-                                >
-                                  <Download className="w-4 h-4" />
-                                  Invoice
-                                </Button>
-                              </div>
-                            </div>
-                          );
-                        })
+                      {usagePercentage > 80 && (
+                        <div className="flex items-center gap-2 p-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                          <AlertCircle className="w-4 h-4 text-orange-500" />
+                          <p className="text-sm text-orange-600">
+                            You've used {Math.round(usagePercentage)}% of your
+                            monthly credits. Consider upgrading your plan.
+                          </p>
+                        </div>
                       )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border">
+                        <div>
+                          <h4 className="text-sm font-medium text-foreground mb-3">
+                            Credit Pricing Guide
+                          </h4>
+                          <div className="space-y-2">
+                            {Object.entries(creditPricing).map(
+                              ([key, pricing]) => {
+                                const Icon = pricing.icon;
+                                return (
+                                  <div
+                                    key={key}
+                                    className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className={`p-1.5 rounded ${pricing.bgColor}`}
+                                      >
+                                        <Icon
+                                          className={`w-3 h-3 ${pricing.color}`}
+                                        />
+                                      </div>
+                                      <span className="text-sm text-foreground">
+                                        {pricing.name}
+                                      </span>
+                                    </div>
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      {pricing.credits}{" "}
+                                      {pricing.credits === 1
+                                        ? "credit"
+                                        : "credits"}
+                                    </Badge>
+                                  </div>
+                                );
+                              },
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <h4 className="text-sm font-medium text-foreground mb-3">
+                            Usage Breakdown
+                          </h4>
+                          <div className="space-y-3">
+                            {stats?.by_type &&
+                              Object.entries(stats.by_type).map(
+                                ([key, amount]) => {
+                                  const pricing =
+                                    creditPricing[key] ||
+                                    creditPricing.basic_query;
+                                  const Icon = pricing.icon;
+                                  const percentage =
+                                    stats.total_spent > 0
+                                      ? (amount / stats.total_spent) * 100
+                                      : 0;
+
+                                  return (
+                                    <div key={key} className="space-y-1">
+                                      <div className="flex items-center justify-between text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <Icon
+                                            className={`w-3 h-3 ${pricing.color}`}
+                                          />
+                                          <span className="text-muted-foreground">
+                                            {pricing.name}
+                                          </span>
+                                        </div>
+                                        <span className="font-medium text-foreground">
+                                          ${amount.toFixed(2)} spent
+                                        </span>
+                                      </div>
+                                      <Progress
+                                        value={percentage}
+                                        className="h-1.5"
+                                      />
+                                    </div>
+                                  );
+                                },
+                              )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Tabs for Usage History and Billing */}
+                <Tabs defaultValue="usage" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 lg:w-auto lg:inline-grid">
+                    <TabsTrigger value="usage">Usage History</TabsTrigger>
+                    <TabsTrigger value="billing">Billing History</TabsTrigger>
+                  </TabsList>
+
+                  {/* Usage History Tab */}
+                  <TabsContent value="usage" className="mt-6">
+                    <Card className="border-border">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle>Recent Usage</CardTitle>
+                            <CardDescription className="mt-1">
+                              Your AI query history and credit consumption
+                            </CardDescription>
+                          </div>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <Download className="w-4 h-4" />
+                            Export
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {usageHistory.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-6">
+                              No usage history found.
+                            </p>
+                          ) : (
+                            usageHistory.map((usage) => {
+                              // Try to map to the correct pricing tier, fallback to basic_query
+                              const queryType =
+                                usage.metadata?.query_type || "basic_query";
+                              const pricing =
+                                creditPricing[queryType] ||
+                                creditPricing.basic_query;
+                              const Icon = pricing.icon;
+                              const usageDate = new Date(usage.created_at);
+
+                              return (
+                                <div
+                                  key={usage.id}
+                                  className="flex items-start gap-4 p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                                >
+                                  <div
+                                    className={`p-2 rounded-lg ${pricing.bgColor} flex-shrink-0`}
+                                  >
+                                    <Icon
+                                      className={`w-4 h-4 ${pricing.color}`}
+                                    />
+                                  </div>
+
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {pricing.name}
+                                      </Badge>
+                                      <span className="text-xs text-muted-foreground">
+                                        {usageDate.toLocaleDateString()} at{" "}
+                                        {usageDate.toLocaleTimeString([], {
+                                          hour: "2-digit",
+                                          minute: "2-digit",
+                                        })}
+                                      </span>
+                                    </div>
+                                    <p className="text-sm text-foreground line-clamp-1 mb-2">
+                                      {usage.description}
+                                    </p>
+                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                                      <div className="flex items-center gap-1 capitalize">
+                                        <Brain className="w-3 h-3" />
+                                        Provider:{" "}
+                                        {usage.metadata?.provider || "System"}
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <CheckCircle className="w-3 h-3 text-green-500" />
+                                        completed
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="text-right flex-shrink-0">
+                                    {/* Backend amounts for usage are negative, we use Math.abs to display the magnitude */}
+                                    <div className="text-lg font-bold text-foreground">
+                                      {Math.abs(usage.amount).toLocaleString()}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground">
+                                      {Math.abs(usage.amount) === 1
+                                        ? "credit"
+                                        : "credits"}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        {usageHistory.length > 0 && (
+                          <div className="mt-6 text-center">
+                            <Button
+                              variant="outline"
+                              className="gap-2"
+                              onClick={loadBillingData}
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                              Refresh List
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+
+                  {/* Billing History Tab */}
+                  <TabsContent value="billing" className="mt-6">
+                    <Card className="border-border">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle>Billing History</CardTitle>
+                            <CardDescription className="mt-1">
+                              Your payment history and invoices
+                            </CardDescription>
+                          </div>
+                          <Button variant="outline" size="sm" className="gap-2">
+                            <Download className="w-4 h-4" />
+                            Download All
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {billingHistory.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-6">
+                              No billing history found.
+                            </p>
+                          ) : (
+                            billingHistory.map((bill) => {
+                              const billDate = new Date(bill.created_at);
+
+                              return (
+                                <div
+                                  key={bill.id}
+                                  className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-4">
+                                    <div className="p-2 rounded-lg bg-green-500/10">
+                                      <CheckCircle className="w-5 h-5 text-green-500" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium text-foreground">
+                                        {bill.description}
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">
+                                        {billDate.toLocaleDateString()}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-6">
+                                    <div className="text-right">
+                                      {/* Showing top-up magnitude */}
+                                      <p className="font-semibold text-green-500">
+                                        +{bill.amount.toLocaleString()}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        credits added
+                                      </p>
+                                    </div>
+                                    <Badge
+                                      variant="default"
+                                      className="capitalize"
+                                    >
+                                      paid
+                                    </Badge>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="gap-2"
+                                    >
+                                      <Download className="w-4 h-4" />
+                                      Invoice
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                </Tabs>
+              </>
+            )}
           </div>
         </div>
       </div>

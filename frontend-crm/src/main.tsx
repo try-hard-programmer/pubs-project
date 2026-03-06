@@ -72,12 +72,20 @@ createRoot(document.getElementById("root")!).render(
                           path="/"
                           element={
                             <ProtectedRoute>
+                              <Dashboard />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/files"
+                          element={
+                            <ProtectedRoute>
                               <Index />
                             </ProtectedRoute>
                           }
                         />
                         <Route
-                          path="/folder/:folderId"
+                          path="/files/folder/:folderId"
                           element={
                             <ProtectedRoute>
                               <Index />
@@ -189,5 +197,5 @@ createRoot(document.getElementById("root")!).render(
         buttonPosition="bottom-right"
       />
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 );

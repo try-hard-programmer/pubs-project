@@ -107,6 +107,7 @@ export const FileGrid = ({
   const [newName, setNewName] = useState<string>("");
   const [isDragOver, setIsDragOver] = useState<string | null>(null);
   const [handleLoading, setHandleLoading] = useState(false);
+  const [movingIds, setMovingIds] = useState<string[]>([]);
   const [deleteDialog, setDeleteDialog] = useState({
     open: false,
     itemCount: 0,
@@ -116,7 +117,6 @@ export const FileGrid = ({
     foldersCount: 0,
     filesInsideFolder: 0,
     folderInsideFolder: 0,
-    // callback yang dijalankan
     callback: null as (() => Promise<void>) | null,
   });
 
@@ -124,8 +124,11 @@ export const FileGrid = ({
     Map<string, { is_folder: boolean }>
   >(new Map());
   const selectionMode = selectedMap.size > 0;
-  const isSelected = (id: string) => selectedMap.has(id);
-  const toggleSelect = (item: FileItem) =>
+  const isSelected = (id: string) => {
+    return selectedMap.has(id);
+  };
+  const toggleSelect = (item: FileItem) => {
+    setMovingIds([item.id]);
     setSelectedMap((prev) => {
       const next = new Map(prev);
       next.has(item.id)
@@ -133,11 +136,11 @@ export const FileGrid = ({
         : next.set(item.id, { is_folder: item.is_folder });
       return next;
     });
+  };
 
   const clearSelection = () => setSelectedMap(new Map());
   const { userRole, isAdmin, isModerator } = useUserRole();
   const { user } = useAuth();
-  console.log("SECTION", section);
 
   const {
     files,
@@ -161,16 +164,6 @@ export const FileGrid = ({
     sortBy,
     sortOrder,
   );
-
-  console.log("FILES", files);
-
-  console.log("FileGrid render:", {
-    filesCount: files?.length || 0,
-    isLoading,
-    section,
-    currentFolderId,
-    error: error?.message,
-  });
 
   // Helper menghitung folder
   function getFilesCountInFolder(folderId: string, files: FileItem[]): number {
@@ -255,57 +248,6 @@ export const FileGrid = ({
     return apiClient.delete<{ status: string }>("/documents/delete", payload);
   }
 
-  // useEffect untuk filter dengan semantic search
-  // useEffect(() => {
-  //   const filterFiles = async () => {
-  //     // 1) Jika tidak ada query, tampilkan semua
-  //     if (!searchQuery.trim()) {
-  //       setFilteredFiles(files || []);
-  //       return;
-  //     }
-
-  //     // 2) Panggil API semantic search
-  //     setIsSearching(true);
-  //     try {
-  //       const response = await fetch("http://localhost:8000/query", {
-  //         method: "POST",
-  //         headers: { "Content-Type": "application/json" },
-  //         body: JSON.stringify({
-  //           email: user.email,
-  //           query: searchQuery,
-  //         }),
-  //       });
-
-  //       if (!response.ok) {
-  //         throw new Error(`Search failed: ${response.status}`);
-  //       }
-
-  //       const data = await response.json();
-  //       const matchedIds = new Set(data.file_id || []);
-  //       // Filter files berdasarkan file_id yang cocok
-  //       const matched = (files || []).filter((file) => matchedIds.has(file.id));
-
-  //       setFilteredFiles(matched);
-  //     } catch (error: any) {
-  //       console.error("Semantic search error:", error);
-  //       toast.error("Search failed: " + error.message);
-  //       // Fallback ke filter lokal
-  //       const localMatch = (files || []).filter((file) =>
-  //         file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  //       );
-  //       setFilteredFiles(localMatch);
-  //     } finally {
-  //       setIsSearching(false);
-  //     }
-  //   };
-
-  //   // Debounce untuk hindari hit API terlalu sering
-  //   const timer = setTimeout(() => {
-  //     filterFiles();
-  //   }, 500);
-
-  //   return () => clearTimeout(timer);
-  // }, [searchQuery, files, user.email]);
   useEffect(() => {
     const filterFiles = async () => {
       // PERBAIKAN: Cek searchQuery lebih ketat
@@ -371,11 +313,9 @@ export const FileGrid = ({
           prev.length === newFiles.length &&
           prev[0]?.id === newFiles[0]?.id
         ) {
-          return prev; // Return same reference to skip re-render
+          return prev;
         }
-        console.log("Files changed without search, syncing", {
-          filesCount: newFiles.length,
-        });
+
         return newFiles;
       });
     }
@@ -420,17 +360,6 @@ export const FileGrid = ({
     deleteAllFiles();
   }, [deleteTrigger]);
 
-  // const filteredFiles =
-  //   files?.filter((file) =>
-  //     file.name.toLowerCase().includes(searchQuery.toLowerCase())
-  //   ) || [];
-
-  console.log("Filtered files:", {
-    originalCount: files?.length || 0,
-    filteredCount: filteredFiles.length,
-    searchQuery,
-  });
-
   // Utility untuk handle click file
   const handleItemClick = (item: FileItem) => {
     if (item.is_folder && onFolderNavigate) {
@@ -460,13 +389,6 @@ export const FileGrid = ({
     }
 
     if (file.url) {
-      // const link = document.createElement("a");
-      // link.href = file.url;
-      // link.download = file.name;
-      // console.log("download", file.name);
-      // document.body.appendChild(link);
-      // link.click();
-      // document.body.removeChild(link);
       const res = await fetch(file.url, { credentials: "omit" });
       const blob = await res.blob();
       const link = document.createElement("a");
@@ -685,6 +607,8 @@ export const FileGrid = ({
     const selectedIds = [...selectedMap.keys()];
     if (!selectedIds.length) return toast.error("No items selected");
 
+    setMovingIds(selectedIds);
+
     const itemMap = new Map(filteredFiles.map((f) => [f.id, f]));
     const items = selectedIds
       .map((id) => itemMap.get(id))
@@ -727,6 +651,7 @@ export const FileGrid = ({
           await moveFileToFolder({
             fileId: item.id,
             folderId: targetFolderId,
+            is_folder: item.is_folder,
           });
           return { success: true, type: "file", item };
         } catch (e: any) {
@@ -833,12 +758,6 @@ export const FileGrid = ({
   // Utility untuk restore 1 file/folder
   const handleRestore = async (file: FileItem) => {
     try {
-      console.log("Restoring item:", {
-        id: file.id,
-        name: file.name,
-        is_folder: file.is_folder,
-      });
-
       // Restore via API (handles both files and folders)
       await restoreFile({ id: file.id, is_folder: file.is_folder });
 
@@ -847,7 +766,6 @@ export const FileGrid = ({
         try {
           const fileUpload = await fetchFile(file.id);
           await uploadSingleFile(fileUpload.file, user.email, file.id);
-          console.log("Embeddings re-uploaded for file:", file.id);
         } catch (embeddingError) {
           console.warn("Failed to re-upload embeddings:", embeddingError);
           // Don't fail restore if embedding upload fails
@@ -870,10 +788,14 @@ export const FileGrid = ({
     const src = filteredFiles.find((f) => f.id === fileId);
     if (!src) return toast.error("File not found");
     if (src.is_shared) return toast.error("Cannot move shared files");
-    if (src.is_folder) return toast.error("Use folder move API for folders"); // atau dukung juga
+    if (src.is_folder) return toast.error("Use folder move API for folders");
 
     try {
-      await moveFileToFolder({ fileId: fileId, folderId: targetFolderId });
+      await moveFileToFolder({
+        fileId: fileId,
+        folderId: targetFolderId,
+        is_folder: src.is_folder,
+      });
       toast.success("File moved");
       if (currentFolderId && currentFolderId !== targetFolderId) {
         setFilteredFiles((prev) => prev.filter((f) => f.id !== fileId));
@@ -965,14 +887,18 @@ export const FileGrid = ({
     const all = filteredFiles || [];
     if (section === "trashed") return [];
 
+    // Exclude folder yang sedang di-move
+    const filtered = all.filter(
+      (f) => f.is_folder && !movingIds.includes(f.id),
+    );
+
     if (!currentFolderId) {
-      return all.filter((f) => f.is_folder && f.parent_folder_id == null);
+      return filtered.filter((f) => f.parent_folder_id == null);
     }
-    return all.filter((f) => f.is_folder);
-  }, [filteredFiles, currentFolderId, section]);
+    return filtered;
+  }, [filteredFiles, currentFolderId, section, movingIds]);
 
   if (isLoading) {
-    console.log("FileGrid: showing loading state");
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center space-y-4">
@@ -1272,7 +1198,6 @@ export const FileGrid = ({
                                     newName.trim() ===
                                       splitFilename(file.name).base
                                   ) {
-                                    // Tidak ada perubahan (atau kosong) → tutup edit tanpa aksi
                                     setEditingId(null);
                                     return;
                                   }

@@ -214,8 +214,6 @@ export const AgentSettingsModal = ({
   });
 
   // Listen for WebSocket Background Processing Updates
-  // NEW: Polling Fallback for Document Processing
-  // This runs alongside the WebSocket. If the WS fails on localhost, this will catch the update.
   useEffect(() => {
     if (!open || !agent?.id) return;
 
@@ -711,6 +709,24 @@ export const AgentSettingsModal = ({
     }
   };
 
+  const hasPendingDocuments = settings.knowledgeBase.some(
+    (doc) => doc.status === "pending",
+  );
+
+  // ADD THIS FUNCTION: Intercept close attempts
+  const handleOpenChange = (isOpen: boolean) => {
+    if (!isOpen) {
+      if (hasPendingDocuments) {
+        toast.warning(
+          "Mohon tunggu hingga proses dokumen selesai sebelum menutup.",
+        );
+        return; // Block the close
+      }
+      if (saving) return; // Block close while saving
+      onClose(); // Allow close
+    }
+  };
+
   // Handler for selecting from predefined list
   const handleAddPredefinedCategory = (value: string) => {
     // Prevent duplicates
@@ -729,7 +745,7 @@ export const AgentSettingsModal = ({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-5xl h-[90vh] flex flex-col p-0 gap-0">
         <DialogHeader className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <DialogTitle className="text-2xl font-bold">
@@ -2081,12 +2097,26 @@ export const AgentSettingsModal = ({
             </Tabs>
 
             <div className="px-6 py-4 border-t flex justify-end gap-2 flex-shrink-0">
-              <Button variant="outline" onClick={onClose} disabled={saving}>
+              {/* CHANGE THIS BUTTON */}
+              <Button
+                variant="outline"
+                onClick={() => handleOpenChange(false)}
+                disabled={saving || hasPendingDocuments}
+              >
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saving}>
-                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {saving ? "Menyimpan..." : "Save Settings"}
+              <Button
+                onClick={handleSave}
+                disabled={saving || hasPendingDocuments}
+              >
+                {(saving || hasPendingDocuments) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {saving
+                  ? "Menyimpan..."
+                  : hasPendingDocuments
+                    ? "Memproses Dokumen..."
+                    : "Save Settings"}
               </Button>
             </div>
           </>

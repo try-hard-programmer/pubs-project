@@ -134,7 +134,7 @@ export async function browseFolder(
     search?: string;
     sort_by?: "name" | "size" | "created_at";
     sort_order?: "asc" | "desc";
-  }
+  },
 ): Promise<BrowseResponse> {
   const params = new URLSearchParams();
 
@@ -182,7 +182,7 @@ export async function detailFolder(folderId: string): Promise<FolderResponse> {
   try {
     console.log(folderId);
     const response = await apiClient.get<FolderResponse>(
-      `/filemanager/folders/${folderId}`
+      `/filemanager/folders/${folderId}`,
     );
     console.log(`Folder ${folderId} details:`, response);
     return response;
@@ -196,7 +196,7 @@ export async function detailFolder(folderId: string): Promise<FolderResponse> {
  * Create a new folder
  */
 export async function createFolder(
-  data: CreateFolderRequest
+  data: CreateFolderRequest,
 ): Promise<FolderItem> {
   return apiClient.post<FolderItem>("/filemanager/folders", data);
 }
@@ -206,9 +206,21 @@ export async function createFolder(
  */
 export async function updateFolder(
   folderId: string,
-  data: UpdateFolderRequest
+  data: UpdateFolderRequest,
 ): Promise<FolderItem> {
   return apiClient.put<FolderItem>(`/filemanager/folders/${folderId}`, data);
+}
+
+/**
+ * Move folder to another folder
+ */
+export async function moveFolder(
+  fileId: string,
+  targetFolderId: string | null,
+): Promise<FileItem> {
+  return apiClient.post<FileItem>(`/filemanager/folders/${fileId}/move`, {
+    new_parent_folder_id: targetFolderId,
+  });
 }
 
 /**
@@ -217,7 +229,7 @@ export async function updateFolder(
 export async function uploadFile(
   file: File,
   parentFolderId?: string | null,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
 ): Promise<FileItem> {
   console.log("fileManagerApi.uploadFile called with:", {
     fileName: file.name,
@@ -230,14 +242,14 @@ export async function uploadFile(
   const blockedExtensions = [".exe", ".app", ".application", ".zip"];
 
   const hasBlockedExtension = blockedExtensions.some((ext) =>
-    fileName.endsWith(ext)
+    fileName.endsWith(ext),
   );
 
   if (hasBlockedExtension) {
     throw new Error(
       `File type tidak diizinkan. Ekstensi ${fileName
         .split(".")
-        .pop()} diblokir karena alasan keamanan.`
+        .pop()} diblokir karena alasan keamanan.`,
     );
   }
 
@@ -282,7 +294,7 @@ export async function getFileDetails(fileId: string): Promise<FileItem> {
  */
 export async function updateFile(
   fileId: string,
-  data: UpdateFileRequest
+  data: UpdateFileRequest,
 ): Promise<FileItem> {
   return apiClient.put<FileItem>(`/filemanager/files/${fileId}`, data);
 }
@@ -292,7 +304,7 @@ export async function updateFile(
  */
 export async function moveFile(
   fileId: string,
-  targetFolderId: string | null
+  targetFolderId: string | null,
 ): Promise<FileItem> {
   return apiClient.post<FileItem>(`/filemanager/files/${fileId}/move`, {
     new_parent_folder_id: targetFolderId,
@@ -306,7 +318,7 @@ export async function moveFile(
  */
 export async function deleteFile(
   fileId: string,
-  permanent: boolean = false
+  permanent: boolean = false,
 ): Promise<void> {
   const endpoint = `/filemanager/files/${fileId}${
     permanent ? "?permanent=true" : "?permanent=false"
@@ -321,7 +333,7 @@ export async function deleteFile(
  */
 export async function deleteFolder(
   folderId: string,
-  permanent: boolean = false
+  permanent: boolean = false,
 ): Promise<void> {
   const endpoint = `/filemanager/folders/${folderId}${
     permanent ? "?permanent=true" : "?permanent=false"
@@ -343,7 +355,7 @@ export async function downloadFile(fileId: string): Promise<Blob> {
 
   const response = await fetch(
     `${getBaseUrl()}/filemanager/files/${fileId}/download`,
-    { headers }
+    { headers },
   );
 
   if (!response.ok) {
@@ -357,7 +369,7 @@ export async function downloadFile(fileId: string): Promise<Blob> {
  * Share file with users or groups
  */
 export async function shareFile(
-  data: ShareFileRequest
+  data: ShareFileRequest,
 ): Promise<ShareResponse> {
   return apiClient.post<ShareResponse>(`/filemanager/shares`, data);
 }
@@ -369,7 +381,7 @@ export async function updateShare(
   share_id: string,
   access_level?: PermissionType, // default "view"
   expires_at?: string | null,
-  metadata?: Record<string, any>
+  metadata?: Record<string, any>,
 ): Promise<ShareResponse> {
   return apiClient.put<ShareResponse>(`/filemanager/shares/${share_id}`, {
     access_level: access_level,
@@ -389,10 +401,10 @@ export async function deleteShare(share_id: string): Promise<[string, string]> {
  * List share file
  */
 export async function listShareFile(
-  file_id?: string
+  file_id?: string,
 ): Promise<[ShareResponse]> {
   return apiClient.get<[ShareResponse]>(
-    `/filemanager/shares${file_id ? `?file_id=${file_id}` : ""}`
+    `/filemanager/shares${file_id ? `?file_id=${file_id}` : ""}`,
   );
 }
 
@@ -402,10 +414,10 @@ export async function listShareFile(
 export async function publicShareFile(
   file_id: string,
   permission?: PermissionType,
-  expires_in_hours?: number
+  expires_in_hours?: number,
 ): Promise<PublicShareResponse> {
   return apiClient.post<PublicShareResponse>(
-    `/filemanager/shares/public?file_id=${file_id}&permission=${permission}&expires_in_hours=${expires_in_hours}`
+    `/filemanager/shares/public?file_id=${file_id}&permission=${permission}&expires_in_hours=${expires_in_hours}`,
   );
 }
 
@@ -426,7 +438,7 @@ export async function restoreFolder(folderId: string): Promise<FileItem> {
   console.log("Restoring folder:", folderId);
   return apiClient.post<FileItem>(
     `/filemanager/folders/${folderId}/restore`,
-    {}
+    {},
   );
 }
 
@@ -435,10 +447,10 @@ export async function restoreFolder(folderId: string): Promise<FileItem> {
  */
 export async function toggleStar(
   fileId: string,
-  isStarred: boolean
+  isStarred: boolean,
 ): Promise<FileItem> {
   return apiClient.put<FileItem>(
-    `/filemanager/files/${fileId}/favorite?is_starred=${isStarred}` // Kirim sebagai query
+    `/filemanager/files/${fileId}/favorite?is_starred=${isStarred}`, // Kirim sebagai query
   );
 }
 

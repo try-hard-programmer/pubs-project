@@ -40,11 +40,17 @@ export const FileManager = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [openUpload, setOpenUpload] = useState(false);
+  // 1. Read the target section from memory BEFORE the first render
+  const initialSection = location.state?.targetSection || "all";
+
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeSection, setActiveSection] = useState("all");
-  const [previousSection, setPreviousSection] = useState("all");
+
+  // 2. Set the initial state to whatever the router handed us
+  const [activeSection, setActiveSection] = useState(initialSection);
+  const [previousSection, setPreviousSection] = useState(initialSection);
+
+  const [openUpload, setOpenUpload] = useState(false);
   const [showUpload, setShowUpload] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
@@ -216,7 +222,7 @@ export const FileManager = () => {
     setFolderPath((prev) => [...prev, folder]);
 
     // Update URL to reflect folder navigation
-    navigate(`/folder/${folder.id}`);
+    navigate(`/files/folder/${folder.id}`);
   };
 
   const handleNavigateBack = () => {
@@ -237,9 +243,10 @@ export const FileManager = () => {
 
       // Update URL - navigate to parent folder or root
       if (newFolderId) {
-        navigate(`/folder/${newFolderId}`);
+        // CHANGE THIS: Add /files in front of the folder path
+        navigate(`/files/folder/${newFolderId}`);
       } else {
-        navigate("/");
+        navigate("/files");
       }
     }
   };
@@ -259,9 +266,10 @@ export const FileManager = () => {
 
     // Navigate to URL
     if (targetFolderId) {
-      navigate(`/folder/${targetFolderId}`);
+      // CHANGE THIS: Add /files in front of the folder path
+      navigate(`/files/folder/${targetFolderId}`);
     } else {
-      navigate("/");
+      navigate("/files");
     }
   };
 
@@ -272,7 +280,7 @@ export const FileManager = () => {
     setFolderPath([{ id: null, name: "My Drive" }]);
 
     // Navigate to root URL
-    navigate("/");
+    navigate("/files");
   };
 
   const handleSectionChange = (section: string) => {
@@ -296,7 +304,7 @@ export const FileManager = () => {
     }
 
     // Navigate to root URL
-    navigate("/");
+    navigate("/files");
   };
 
   return (

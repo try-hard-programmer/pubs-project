@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import { X, Download, ZoomIn, ZoomOut, RotateCw, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -117,11 +118,9 @@ const DocumentViewer = ({
   const isOfficeDoc =
     type.includes("officedocument") ||
     type.includes("msword") ||
-    type.includes("excel") ||
     type.includes("powerpoint");
 
   if (isOfficeDoc) {
-    // Use Microsoft Office Online viewer for Office documents
     const viewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(
       url,
     )}`;
@@ -144,26 +143,91 @@ const DocumentViewer = ({
         </div>
         <h3 className="text-lg font-medium">{name}</h3>
         <p className="text-muted-foreground">
-          Preview not available for this file type. Click download to view the
-          file.
+          Preview tidak tersedia untuk tipe file ini. Klik download untuk
+          membuka.
         </p>
       </div>
     </div>
   );
 };
 
-const getFileTypeCategory = (type: string) => {
+const ExcelViewer = ({ url }: { url: string }) => {
+  const [sheets, setSheets] = useState<{ name: string; data: any[][] }[]>([]);
+
+  useEffect(() => {
+    const fetchAndParse = async () => {
+      try {
+        const res = await fetch(url);
+        const buf = await res.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const parsedSheets = wb.SheetNames.map((name) => {
+          const ws = wb.Sheets[name];
+          // 1 = header array, 0 = sans header
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          return { name, data };
+        });
+        setSheets(parsedSheets as { name: string; data: any[][] }[]);
+      } catch (err) {
+        console.error("Failed to parse Excel file", err);
+      }
+    };
+    fetchAndParse();
+  }, [url]);
+
+  if (sheets.length === 0) {
+    return (
+      <div className="w-full max-w-2xl mx-auto p-8 text-center">
+        <p className="text-muted-foreground">Memuat file Excel...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-6xl mx-auto space-y-6 overflow-auto">
+      {sheets.map((sheet) => (
+        <div key={sheet.name} className="border rounded-lg overflow-hidden">
+          <div className="bg-muted px-4 py-2 font-medium">{sheet.name}</div>
+          <div className="max-h-[600px] overflow-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {sheet.data.map((row, i) => (
+                  <tr key={i} className="border-t">
+                    {row.map((cell, j) => (
+                      <td
+                        key={j}
+                        className="px-3 py-1 border-l first:border-l-0 text-left"
+                      >
+                        {cell == null ? "" : String(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const getFileTypeCategory = (type: string, name: string) => {
   if (type.startsWith("image/")) return "image";
   if (type.startsWith("video/")) return "video";
   if (type.startsWith("audio/")) return "audio";
   if (type === "application/pdf") return "pdf";
   if (
+    type.includes("officedocument.spreadsheetml") ||
+    name.toLowerCase().endsWith(".xlsx") ||
+    name.toLowerCase().endsWith(".xls")
+  ) {
+    return "excel";
+  }
+  if (
     type.includes("text/") ||
     type.includes("document") ||
     type.includes("word") ||
-    type.includes("excel") ||
-    type.includes("powerpoint") ||
-    type.includes("spreadsheet")
+    type.includes("powerpoint")
   ) {
     return "document";
   }
@@ -194,7 +258,7 @@ export const FilePreview = ({ file, isOpen, onClose }: FilePreviewProps) => {
     }
   };
 
-  const fileCategory = getFileTypeCategory(file.type);
+  const fileCategory = getFileTypeCategory(file.type, file.name);
 
   const renderPreview = () => {
     if (!file.url) {
@@ -220,6 +284,8 @@ export const FilePreview = ({ file, isOpen, onClose }: FilePreviewProps) => {
         return <AudioViewer url={file.url} name={file.name} />;
       case "pdf":
         return <PDFViewer url={file.url} />;
+      case "excel":
+        return <ExcelViewer url={file.url} />;
       case "document":
         return (
           <DocumentViewer url={file.url} name={file.name} type={file.type} />

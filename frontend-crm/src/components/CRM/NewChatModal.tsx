@@ -47,6 +47,12 @@ interface Agent {
   email: string;
   status: "active" | "inactive" | "busy";
   activeIntegrations?: string[];
+  integrations?: Array<{
+    id: string;
+    channel: string;
+    status: string;
+    enabled: boolean;
+  }>;
 }
 
 interface NewChatModalProps {
@@ -342,39 +348,62 @@ export const NewChatModal = ({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (activeTab === "manual") {
-      if (channel === "telegram") {
-        newErrors.selection = "Manual input tidak diperbolehkan untuk Telegram";
-      }
+    // --- 1. Integration Validation ---
+    const currentAssignedAgent = agents.find((a) => a.id === assignedAgentId);
+    const assignedOwnsIntegration =
+      currentAssignedAgent?.integrations?.some((i) => i.channel === channel) ??
+      false;
+    const assignedHasActiveIntegration =
+      currentAssignedAgent?.activeIntegrations?.includes(channel) ?? false;
 
-      // Name Validation
-      if (!manualName.trim()) {
-        newErrors.customerName = "Nama wajib diisi";
-      } else if (!isValidName(manualName)) {
-        newErrors.customerName = "Nama mengandung karakter tidak valid";
-      }
-
-      if (!manualContact.trim()) {
-        newErrors.contact = "Kontak wajib diisi";
-      } else if (hasEmoji(manualContact)) {
-        newErrors.contact = "Kontak tidak boleh mengandung emoticon";
-      } else if (channel === "whatsapp") {
-        // Since we auto-cleaned it in handleContactChange, just enforce the '0' rule here
-        if (manualContact.startsWith("0")) {
-          newErrors.contact =
-            "Nomor WhatsApp harus menggunakan kode negara (contoh: 628...)";
-        } else if (/[^0-9]/.test(manualContact)) {
-          newErrors.contact = "Nomor WhatsApp hanya boleh berisi angka";
-        }
-      }
-    } else {
-      if (!selectedCustomer) {
-        newErrors.selection = "Pilih customer dari database";
-      }
+    if (assignedOwnsIntegration && !assignedHasActiveIntegration) {
+      newErrors.integration = `Integrasi ${selectedChannel?.label} still DISCONNECTED.`;
+    }
+    if (!assignedOwnsIntegration && integrationAgentId === "unassigned") {
+      newErrors.integration =
+        "Wajib memilih Contact Integration Agent yang aktif.";
     }
 
+    // --- 2. Initial Message Validation ---
     if (!initialMessage.trim()) {
       newErrors.initialMessage = "Pesan awal wajib diisi";
+    }
+
+    // --- 3. Database Selection Validation ---
+    if (activeTab === "existing" && !selectedCustomer) {
+      newErrors.selection = "Pilih customer dari database";
+    }
+
+    // --- 4. Manual Input Validation ---
+    if (activeTab === "manual" && channel === "telegram") {
+      newErrors.selection = "Manual input tidak diperbolehkan untuk Telegram";
+    }
+
+    // Name Validation
+    if (activeTab === "manual" && !manualName.trim()) {
+      newErrors.customerName = "Nama wajib diisi";
+    } else if (activeTab === "manual" && !isValidName(manualName)) {
+      newErrors.customerName = "Nama mengandung karakter tidak valid";
+    }
+
+    // Contact Validation
+    if (activeTab === "manual" && !manualContact.trim()) {
+      newErrors.contact = "Kontak wajib diisi";
+    } else if (activeTab === "manual" && hasEmoji(manualContact)) {
+      newErrors.contact = "Kontak tidak boleh mengandung emoticon";
+    } else if (
+      activeTab === "manual" &&
+      channel === "whatsapp" &&
+      manualContact.startsWith("0")
+    ) {
+      newErrors.contact =
+        "Nomor WhatsApp harus menggunakan kode negara (contoh: 628...)";
+    } else if (
+      activeTab === "manual" &&
+      channel === "whatsapp" &&
+      /[^0-9]/.test(manualContact)
+    ) {
+      newErrors.contact = "Nomor WhatsApp hanya boleh berisi angka";
     }
 
     setErrors(newErrors);
@@ -418,6 +447,16 @@ export const NewChatModal = ({
         onOpenExistingChat(duplicate.id);
       }
 
+      const currentAssignedAgent = agents.find((a) => a.id === assignedAgentId);
+      const assignedHasIntegration =
+        currentAssignedAgent?.activeIntegrations?.includes(channel) ?? false;
+
+      const finalIntegrationId = assignedHasIntegration
+        ? assignedAgentId
+        : integrationAgentId !== "unassigned"
+          ? integrationAgentId
+          : undefined;
+
       await onCreateChat({
         channel,
         contact: finalContact,
@@ -425,10 +464,8 @@ export const NewChatModal = ({
         initialMessage: initialMessage.trim(),
         assignedAgentId:
           assignedAgentId !== "unassigned" ? assignedAgentId : undefined,
-        using_agent_integration_id:
-          integrationAgentId !== "unassigned" ? integrationAgentId : undefined,
+        using_agent_integration_id: finalIntegrationId,
       });
-      handleClose();
     } catch (error) {
       console.error(error);
     } finally {
@@ -622,22 +659,11 @@ export const NewChatModal = ({
             </TabsContent>
           </Tabs>
 
-          {/* 1. Assign ke Agent */}
           <div className="space-y-2">
             <Label>Assign ke Agent</Label>
             <Select
               value={assignedAgentId}
-              onValueChange={(val) => {
-                setAssignedAgentId(val);
-                // SMART LOGIC: Auto-assign integration if this agent has it
-                const selectedAgent = agents.find((a) => a.id === val);
-                if (
-                  selectedAgent &&
-                  selectedAgent.activeIntegrations?.includes(channel)
-                ) {
-                  setIntegrationAgentId(val);
-                }
-              }}
+              onValueChange={setAssignedAgentId}
               disabled={isCreating}
             >
               <SelectTrigger>
@@ -658,60 +684,90 @@ export const NewChatModal = ({
 
           {/* 2. Assign ke Contact Integration Agent */}
           {(() => {
-            // Cek apakah agent yang di-assign punya integrasi untuk channel ini
             const currentAssignedAgent = agents.find(
               (a) => a.id === assignedAgentId,
             );
-            const assignedHasIntegration =
+
+            // 1. Cek apakah agent punya record integrasi (meskipun disconnected!)
+            const assignedOwnsIntegration =
+              currentAssignedAgent?.integrations?.some(
+                (i) => i.channel === channel,
+              ) ?? false;
+
+            // 2. Cek apakah integrasinya hidup
+            const assignedHasActiveIntegration =
               currentAssignedAgent?.activeIntegrations?.includes(channel) ??
               false;
+
+            const availableIntegrationAgents = agents.filter(
+              (a) =>
+                a.status === "active" &&
+                a.activeIntegrations?.includes(channel),
+            );
+            const hasNoIntegrationAgents =
+              availableIntegrationAgents.length === 0;
+
+            // Kunci dropdown jika dia punya integrasi sendiri, ATAU tidak ada agent yg bisa dipinjam
+            const isDisabled =
+              isCreating || assignedOwnsIntegration || hasNoIntegrationAgents;
+
+            let dropdownValue = integrationAgentId;
+            if (assignedOwnsIntegration) dropdownValue = assignedAgentId;
+            else if (hasNoIntegrationAgents) dropdownValue = "unassigned";
 
             return (
               <div className="space-y-2">
                 <Label>Assign ke Contact Integration Agent</Label>
                 <Select
-                  value={integrationAgentId}
-                  onValueChange={setIntegrationAgentId}
-                  // SMART LOGIC: Disable (lock) dropdown jika agent di atas sudah punya integrasi
-                  disabled={isCreating || assignedHasIntegration}
+                  value={dropdownValue}
+                  onValueChange={(val) => {
+                    setIntegrationAgentId(val);
+                    setErrors((prev) => ({ ...prev, integration: "" }));
+                  }}
+                  disabled={isDisabled}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger
+                    className={errors.integration ? "border-red-500" : ""}
+                  >
                     <SelectValue placeholder="Pilih agent integration..." />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="unassigned">
+                    <SelectItem value="unassigned" disabled>
                       Tidak assign agent integration
                     </SelectItem>
-                    {agents
-                      .filter(
-                        (agent) =>
-                          agent.status === "active" &&
-                          agent.activeIntegrations?.includes(channel),
-                      )
-                      .map((agent) => (
-                        <SelectItem key={agent.id} value={agent.id}>
-                          {agent.name}
-                        </SelectItem>
-                      ))}
+                    {availableIntegrationAgents.map((agent) => (
+                      <SelectItem key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
 
                 {/* Info Text UX */}
-                {assignedHasIntegration ? (
-                  <p className="text-xs text-green-600">
-                    Agent yang dipilih akan otomatis menggunakan integrasinya
-                    sendiri.
-                  </p>
-                ) : agents.filter(
-                    (a) =>
-                      a.status === "active" &&
-                      a.activeIntegrations?.includes(channel),
-                  ).length === 0 ? (
+                {assignedOwnsIntegration ? (
+                  assignedHasActiveIntegration ? (
+                    <p className="text-xs text-green-600">
+                      Agent yang dipilih memiliki integrasi ini dan otomatis
+                      menggunakannya.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-red-500 font-medium">
+                      Agent ini memiliki integrasi {selectedChannel?.label},
+                      tetapi statusnya DISCONNECTED. Tidak bisa meminjam
+                      integrasi lain.
+                    </p>
+                  )
+                ) : hasNoIntegrationAgents ? (
                   <p className="text-xs text-amber-600">
                     Tidak ada agent aktif yang memiliki integrasi{" "}
-                    {selectedChannel?.label}.
+                    {selectedChannel?.label} yang terhubung.
                   </p>
                 ) : null}
+
+                {/* Validation Error */}
+                {errors.integration && !assignedOwnsIntegration && (
+                  <p className="text-xs text-red-500">{errors.integration}</p>
+                )}
               </div>
             );
           })()}

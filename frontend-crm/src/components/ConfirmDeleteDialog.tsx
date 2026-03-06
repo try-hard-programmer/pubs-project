@@ -51,20 +51,20 @@ export const ConfirmDeleteDialog = ({
               ? "folder"
               : "file"
             : isFolder
-            ? "folders"
-            : "files"
+              ? "folders"
+              : "files"
         }?`
     : showBreakdown
-    ? `Move ${itemCount} item(s) to trash?`
-    : `Move ${itemCount} ${
-        itemCount === 1
-          ? isFolder
-            ? "folder"
-            : "file"
-          : isFolder
-          ? "folders"
-          : "files"
-      } to trash?`;
+      ? `Move ${itemCount} item(s) to trash?`
+      : `Move ${itemCount} ${
+          itemCount === 1
+            ? isFolder
+              ? "folder"
+              : "file"
+            : isFolder
+              ? "folders"
+              : "files"
+        } to trash?`;
 
   const description = isPermanent
     ? "This action cannot be undone. All selected items will be permanently deleted."
@@ -161,7 +161,9 @@ export const ConfirmDeleteDialog = ({
           <AlertDialogAction
             onClick={onConfirm}
             className={
-              isPermanent ? "bg-destructive hover:bg-destructive/90" : ""
+              isPermanent
+                ? "bg-destructive hover:bg-destructive/90 text-white"
+                : ""
             }
           >
             {isPermanent ? "Delete Permanently" : "Move to Trash"}

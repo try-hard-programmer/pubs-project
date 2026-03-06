@@ -286,26 +286,32 @@ function formatRelativeTime(isoTimestamp: string): string {
  * @param backendAgent - Agent data from API (snake_case)
  * @returns Agent data for frontend (camelCase)
  */
-export function transformAgentToFrontend(
-  backendAgent: AgentBackend,
-): AgentFrontend {
+// Inside src/services/crmAgentsService.ts
+
+export function transformAgentToFrontend(backendAgent: any): any {
   return {
     id: backendAgent.id,
-    userId: backendAgent.user_id,
+    userId: backendAgent.user_id || null,
     name: backendAgent.name,
     email: backendAgent.email,
     phone: backendAgent.phone,
     status: backendAgent.status,
-    avatar: backendAgent.avatar_url || undefined,
-    assignedChats: backendAgent.assigned_chats_count,
-    resolvedToday: backendAgent.resolved_today_count,
-    avgResponseTime: formatResponseTime(backendAgent.avg_response_time_seconds),
-    lastActive: formatRelativeTime(backendAgent.last_active_at),
+    assignedChats: backendAgent.assigned_chats_count || 0,
+    resolvedToday: backendAgent.resolved_today_count || 0,
+    avgResponseTime: "N/A", // Or your formatter
+    lastActive: backendAgent.last_active_at, // Or your relative time formatter
+
+    // 🔥 THE CRITICAL FIX: Strictly filter to ONLY 'connected' AND 'enabled'
     activeIntegrations: backendAgent.integrations
       ? backendAgent.integrations
-          .filter((intg) => intg.enabled)
-          .map((intg) => intg.channel)
+          .filter(
+            (intg: any) => intg.enabled === true && intg.status === "connected",
+          )
+          .map((intg: any) => intg.channel)
       : [],
+
+    // (Optional) Pass raw integrations if your other pages need them
+    integrations: backendAgent.integrations || [],
   };
 }
 
