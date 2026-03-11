@@ -42,16 +42,18 @@ export const AddAgentDialog = ({
   });
 
   const [errors, setErrors] = useState<Partial<Record<keyof Agent, string>>>(
-    {}
+    {},
   );
   const [touched, setTouched] = useState<Partial<Record<keyof Agent, boolean>>>(
-    {}
+    {},
   );
 
   // Regex Patterns
   const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-  const PHONE_REGEX = /^\+?[0-9\s-()]{10,20}$/;
-  const NAME_REGEX = /^[a-zA-Z\s'-]+$/;
+  const NAME_REGEX = /^[\p{L}\p{N}\s\-''.]+$/u;
+
+  const hasEmoji = (str: string) =>
+    /(\p{Extended_Pictographic}|\p{Emoji_Presentation})/gu.test(str);
 
   const validateField = (field: keyof Agent, value: string): string => {
     switch (field) {
@@ -61,34 +63,72 @@ export const AddAgentDialog = ({
         if (value.length > 50) return "Name must be less than 50 characters";
         if (!NAME_REGEX.test(value)) return "Name contains invalid characters";
         return "";
+
       case "email":
         if (!value.trim()) return "Email is required";
         if (!EMAIL_REGEX.test(value))
           return "Please enter a valid email address";
         return "";
+
       case "phone":
         if (!value.trim()) return "Phone is required";
-        // Remove non-digit chars to count actual numbers
-        const digits = value.replace(/\D/g, "");
-        if (digits.length < 10)
-          return "Phone number is too short (min 10 digits)";
-        if (digits.length > 15)
-          return "Phone number is too long (max 15 digits)";
-        if (!PHONE_REGEX.test(value)) return "Invalid phone number format";
+
+        // 1. Emoji check
+        if (hasEmoji(value)) return "Phone cannot contain emojis";
+
+        // 2. Clean the value for logical checks (this matches what handleChange outputs)
+        const cleanedValue = value.replace(/[\s+\-().]/g, "");
+
+        // 3. Block non-numeric characters entirely
+        if (/[^0-9]/.test(cleanedValue)) return "Only numbers are allowed";
+
+        // 4. Block leading '0'
+        if (cleanedValue.startsWith("0"))
+          return "Use country code (e.g., 62), not '0'";
+
+        // 5. Must start with a valid country code (1-9)
+        if (cleanedValue.length > 0 && !/^[1-9]/.test(cleanedValue)) {
+          return "Must start with a valid country code";
+        }
+
+        // 6. Length checks (E.164 limits)
+        if (cleanedValue.length > 0 && cleanedValue.length < 7) {
+          return "Phone number too short (min 7 digits)";
+        }
+        if (cleanedValue.length > 15) {
+          return "Phone number too long (max 15 digits)";
+        }
+
+        // 7. Detect fake/repeating numbers
+        if (/^(\d)\1{6,}$/.test(cleanedValue)) {
+          return "Invalid phone number format";
+        }
+
         return "";
+
       default:
         return "";
     }
   };
 
   const handleChange = (field: keyof Agent, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    let finalValue = value;
 
-    // Real-time validation if the field has been touched or has an error
-    if (touched[field] || errors[field]) {
+    // 🚀 LIVE FORMATTING: Apply smart cleaning instantly to the phone field
+    if (field === "phone") {
+      finalValue = value.replace(/[\s+\-().]/g, "");
+
+      // Prevent typing beyond 15 chars entirely to enforce max limit live
+      if (finalValue.length > 15) return;
+    }
+
+    setFormData((prev) => ({ ...prev, [field]: finalValue }));
+
+    // Real-time validation if the field has been touched, already has an error, OR is the phone field
+    if (touched[field] || errors[field] || field === "phone") {
       setErrors((prev) => ({
         ...prev,
-        [field]: validateField(field, value),
+        [field]: validateField(field, finalValue),
       }));
     }
   };
@@ -104,7 +144,7 @@ export const AddAgentDialog = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validate all fields
+    // Validate all fields right before submission
     const nameError = validateField("name", formData.name);
     const emailError = validateField("email", formData.email);
     const phoneError = validateField("phone", formData.phone);
@@ -124,8 +164,7 @@ export const AddAgentDialog = ({
         ...formData,
         name: formData.name.trim(),
         email: formData.email.trim().toLowerCase(),
-        // Filter out the leading + to avoid double prefixes (e.g. +62 becoming ++62)
-        phone: formData.phone.trim().replace(/^\+/, ""),
+        phone: formData.phone, // 🚀 Clean, strictly validated, ready for the DB!
       });
       handleClose();
     }
@@ -208,7 +247,7 @@ export const AddAgentDialog = ({
             <Input
               id="phone"
               type="tel"
-              placeholder="+62 812-3456-7890"
+              placeholder="e.g. 6281234567890" // Global placeholder format
               value={formData.phone}
               onChange={(e) => handleChange("phone", e.target.value)}
               onBlur={() => handleBlur("phone")}
@@ -222,7 +261,7 @@ export const AddAgentDialog = ({
               </p>
             ) : (
               <p className="text-[10px] text-muted-foreground">
-                Include country code (e.g. +62)
+                Include country code without '+' or leading '0' (e.g. 62)
               </p>
             )}
           </div>

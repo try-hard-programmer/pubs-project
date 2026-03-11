@@ -466,8 +466,10 @@ export const NewChatModal = ({
           assignedAgentId !== "unassigned" ? assignedAgentId : undefined,
         using_agent_integration_id: finalIntegrationId,
       });
+
+      onClose();
     } catch (error) {
-      console.error(error);
+      console.error("Creation failed:", error);
     } finally {
       setIsCreating(false);
     }

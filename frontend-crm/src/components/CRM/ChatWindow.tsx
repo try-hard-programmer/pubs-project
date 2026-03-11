@@ -188,6 +188,15 @@ export const ChatWindow = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const lastMessageIdRef = useRef<string | null>(null);
 
+  // 🚀 THE FIX: Auto-clear inputs when switching chats or when status changes
+  useEffect(() => {
+    setMessageInput("");
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [chatId, status, isOwnChat]);
+
   // ==========================================================================
   // SMART AUTO-SCROLL EFFECT
   // ==========================================================================
@@ -272,15 +281,16 @@ export const ChatWindow = ({
     return isHuman;
   });
 
-  // RENDER HELPERS
+  // 🚀 PASTE THE FALLBACK EXACTLY HERE:
+  const systemAiAgent = agents.find((a) => !a.userId);
+  const fallbackAiName = systemAiAgent ? systemAiAgent.name : "AI Assistant";
 
+  // RENDER HELPERS
   const renderAttachment = (attachment: {
     name: string;
     url: string;
     type: string;
   }) => {
-    if (!attachment || !attachment.url) return null;
-
     // LOGIC:
     // 1. Is the MIME type explicitly an image? (e.g. "image/png")
     // 2. OR is the MIME type generic ("file") but the name looks like an image?
@@ -405,7 +415,8 @@ export const ChatWindow = ({
                       className="text-xs flex items-center gap-1"
                     >
                       <User className="w-3 h-3" />
-                      {humanAgentName || "Human Agent"}
+                      {/* 🚀 Use assignedTo as a secondary fallback if the DB is slow */}
+                      {humanAgentName || assignedTo || "Human Agent"}
                     </Badge>
                     {escalatedAt && aiAgentName && (
                       <Badge
@@ -502,10 +513,12 @@ export const ChatWindow = ({
                     Assign to Me
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem onClick={onMarkResolved}>
-                  Mark as Resolved
-                </DropdownMenuItem>
-                <DropdownMenuItem>View Customer Profile</DropdownMenuItem>
+                {status !== "resolved" && status !== "closed" && (
+                  <DropdownMenuItem onClick={onMarkResolved}>
+                    Mark as Resolved
+                  </DropdownMenuItem>
+                )}
+                {/* <DropdownMenuItem>View Customer Profile</DropdownMenuItem> hide for now */}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -566,6 +579,25 @@ export const ChatWindow = ({
                   const isCustomer = message.sender === "customer";
                   const isAI = message.sender === "ai";
 
+                  // 🚀 THE FIX: Calculate the perfect display name based on sender type
+                  let displayName = message.senderName;
+
+                  if (
+                    isAI &&
+                    (!displayName ||
+                      displayName === "Customer Support Assistant")
+                  ) {
+                    displayName = aiAgentName || fallbackAiName;
+                  } else if (
+                    !isCustomer &&
+                    !isAI &&
+                    (!displayName || displayName === "Human Agent")
+                  ) {
+                    displayName = humanAgentName || "Agent";
+                  } else if (isCustomer && !displayName) {
+                    displayName = customerName || "Customer";
+                  }
+
                   // CHANGE: Use the helper here
                   const attachment = message.attachment;
 
@@ -576,7 +608,6 @@ export const ChatWindow = ({
                         isCustomer ? "" : "flex-row-reverse"
                       }`}
                     >
-                      {/* ... Avatar code remains the same ... */}
                       <Avatar className="w-8 h-8 flex-shrink-0">
                         <AvatarFallback
                           className={
@@ -588,8 +619,9 @@ export const ChatWindow = ({
                           }
                         >
                           {isCustomer ? (
-                            message.senderName ? (
-                              message.senderName.charAt(0).toUpperCase()
+                            // 🚀 Apply the calculated displayName here for the initial
+                            displayName ? (
+                              displayName.charAt(0).toUpperCase()
                             ) : (
                               "?"
                             )
@@ -607,8 +639,9 @@ export const ChatWindow = ({
                         }`}
                       >
                         <div className="flex items-center gap-2 mb-1">
+                          {/* 🚀 Apply the calculated displayName here for the name tag */}
                           <span className="text-xs font-medium text-foreground">
-                            {message.senderName}
+                            {displayName}
                           </span>
                           <span className="text-xs text-muted-foreground">
                             {message.timestamp}
@@ -677,6 +710,7 @@ export const ChatWindow = ({
                 size="icon"
                 className="flex-shrink-0"
                 onClick={handlePaperclipClick}
+                disabled={!isOwnChat}
               >
                 <Paperclip className="w-5 h-5" />
               </Button>

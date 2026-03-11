@@ -93,6 +93,7 @@ interface CustomerServiceSidebarProps {
 // ============================================================================
 
 const checkIsAiError = (chat: Chat): boolean => {
+  if (chat.status === "resolved" || chat.status === "closed") return false;
   if (chat.handledBy !== "ai" || !chat.lastMessage) return false;
 
   const msg = chat.lastMessage.toLowerCase();

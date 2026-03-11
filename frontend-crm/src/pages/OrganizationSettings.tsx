@@ -51,6 +51,7 @@ import {
   Eye,
   Lock,
   FolderLock,
+  Loader2,
 } from "lucide-react";
 import { apiClient } from "@/lib/apiClient";
 import { toast } from "sonner";
@@ -86,6 +87,7 @@ export const OrganizationSettings = () => {
   const [orgNameValid, setorgNameValid] = useState(true);
   const [orgDescription, setOrgDescription] = useState("");
   const [updatingOrg, setUpdatingOrg] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   const handleSectionChange = (section: string) => {
     setActiveSection(section);
@@ -199,12 +201,17 @@ export const OrganizationSettings = () => {
     }
   };
 
-  const handleResendInvitation = async (email: string) => {
+  const handleResendInvitation = async (id: string, email: string) => {
+    setResendingId(id); // Start loading
     try {
       await resendInvitation(email);
       toast.success("Invitation resent successfully!");
     } catch (error: any) {
       toast.error(error.message || "Failed to resend invitation");
+    } finally {
+      setTimeout(() => {
+        setResendingId(null);
+      }, 500);
     }
   };
 
@@ -296,7 +303,7 @@ export const OrganizationSettings = () => {
         {
           name: orgName,
           description: orgDescription || null,
-        }
+        },
       );
 
       toast.success("Organization updated successfully");
@@ -304,7 +311,7 @@ export const OrganizationSettings = () => {
 
       // Refresh organization data
       const updatedOrg = await apiClient.get(
-        `/organizations/${firstOrg.organization_id}`
+        `/organizations/${firstOrg.organization_id}`,
       );
       setCurrentOrg(updatedOrg);
     } catch (error: any) {
@@ -436,7 +443,7 @@ export const OrganizationSettings = () => {
       setLoadingOrg(true);
       try {
         const org = await apiClient.get(
-          `/organizations/${firstOrg.organization_id}`
+          `/organizations/${firstOrg.organization_id}`,
         );
         setCurrentOrg(org);
       } catch (error: any) {
@@ -872,11 +879,19 @@ export const OrganizationSettings = () => {
                                             size="sm"
                                             onClick={() =>
                                               handleResendInvitation(
-                                                invitation.invited_email
+                                                invitation.id, // Pass the ID
+                                                invitation.invited_email,
                                               )
                                             }
+                                            disabled={
+                                              resendingId === invitation.id
+                                            } // Lock only this button
                                           >
-                                            <RefreshCw className="w-4 h-4" />
+                                            {resendingId === invitation.id ? (
+                                              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                            ) : (
+                                              <RefreshCw className="w-4 h-4" />
+                                            )}
                                           </Button>
                                           <Button
                                             variant="ghost"
@@ -884,10 +899,10 @@ export const OrganizationSettings = () => {
                                             onClick={() => {
                                               const link = `${window.location.origin}/accept-invitation?token=${invitation.invitation_token}`;
                                               navigator.clipboard.writeText(
-                                                link
+                                                link,
                                               );
                                               toast.success(
-                                                "Invitation link copied to clipboard"
+                                                "Invitation link copied to clipboard",
                                               );
                                             }}
                                           >
@@ -898,7 +913,7 @@ export const OrganizationSettings = () => {
                                             size="sm"
                                             onClick={() =>
                                               handleCancelInvitation(
-                                                invitation.id
+                                                invitation.id,
                                               )
                                             }
                                           >
@@ -1043,7 +1058,7 @@ export const OrganizationSettings = () => {
                                     year: "numeric",
                                     month: "short",
                                     day: "numeric",
-                                  }
+                                  },
                                 )}
                               </TableCell>
                               <TableCell className="text-right">

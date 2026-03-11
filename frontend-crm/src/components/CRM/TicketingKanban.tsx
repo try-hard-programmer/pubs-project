@@ -55,6 +55,7 @@ interface Ticket {
 
 interface Agent {
   id: string;
+  userId?: string | null;
   name: string;
   email: string;
   phone: string;
@@ -207,7 +208,7 @@ export const TicketingKanban = ({
 
                 {/* Existing Agent List */}
                 {agents
-                  .filter((a) => a.status === "active")
+                  .filter((a) => a.status === "active" && a.userId !== null)
                   .map((agent) => (
                     <SelectItem
                       key={agent.id}
@@ -313,13 +314,13 @@ export const TicketingKanban = ({
               <div className="flex gap-3 min-w-max h-full">
                 {columns.map((column) => {
                   const columnTickets = filteredTickets.filter(
-                    (ticket) => ticket.status === column.status
+                    (ticket) => ticket.status === column.status,
                   );
 
                   return (
                     <Card
                       key={column.id}
-                      className="w-72 flex-shrink-0 flex flex-col"
+                      className="w-1/4 min-w-[280px] flex flex-col"
                     >
                       <CardHeader className="pb-2 pt-3 px-3 border-b">
                         <div className="flex items-center justify-between">

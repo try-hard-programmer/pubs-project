@@ -51,6 +51,12 @@ export interface WebSocketConnectionEstablished extends WebSocketMessage {
 export interface WebSocketNewMessage extends WebSocketMessage {
   type: "new_message";
   data: {
+    human_agent_id: string;
+    ai_agent_id: string;
+    human_agent_name: string;
+    ai_agent_name: string;
+    status: any;
+    chat_status: string;
     chat_id: string;
     message_id: string;
     customer_id: string;

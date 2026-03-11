@@ -68,11 +68,11 @@ interface AgentManagementModalProps {
       | "resolvedToday"
       | "avgResponseTime"
       | "lastActive"
-    >
+    >,
   ) => void;
   onUpdateAgentStatus: (
     agentId: string,
-    status: "active" | "inactive" | "busy"
+    status: "active" | "inactive" | "busy",
   ) => void;
   onSaveAgentSettings: (agentId: string, settings: any) => void;
   onDeleteAgent: (agentId: string) => void; // Added Prop
@@ -154,7 +154,7 @@ export const AgentManagementModal = ({
       | "resolvedToday"
       | "avgResponseTime"
       | "lastActive"
-    >
+    >,
   ) => {
     onAddAgent(agentData);
     setAddAgentOpen(false);
@@ -182,6 +182,27 @@ export const AgentManagementModal = ({
       setDeleteDialogOpen(false);
       setAgentToDelete(null);
     }
+  };
+
+  const formatLastActive = (isoString?: string) => {
+    if (!isoString || isoString === "-") return "Never";
+
+    const date = new Date(isoString);
+    const today = new Date();
+
+    const isToday =
+      date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear();
+
+    const time = date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    return isToday
+      ? `Today at ${time}`
+      : `${date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" })} at ${time}`;
   };
 
   return (
@@ -376,7 +397,7 @@ export const AgentManagementModal = ({
                               </div>
                               <div className="flex items-center gap-2 text-muted-foreground">
                                 <Clock className="h-3.5 w-3.5" />
-                                <span>Last active: {agent.lastActive}</span>
+                                {formatLastActive(agent.lastActive)}
                               </div>
                             </div>
 
