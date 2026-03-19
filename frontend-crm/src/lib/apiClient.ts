@@ -248,6 +248,35 @@ class ApiClient {
     // Return the raw file data instead of trying to parse JSON
     return response.blob();
   }
+
+  /**
+   * POST request returning a Blob (CRITICAL FOR FILE DOWNLOADS)
+   */
+  async postBlob(
+    endpoint: string,
+    body?: any,
+    options?: RequestInit,
+  ): Promise<Blob> {
+    const requestOptions: RequestInit = {
+      ...options,
+      method: "POST",
+    };
+
+    if (body instanceof FormData) {
+      requestOptions.body = body;
+    } else if (body) {
+      requestOptions.body = JSON.stringify(body);
+    }
+
+    const response = await this.authenticatedFetch(endpoint, requestOptions);
+
+    if (!response.ok) {
+      throw new Error(`POST Blob request failed (${response.status})`);
+    }
+
+    // THE BE TEAM IS RIGHT: We must return the raw blob here, not json!
+    return response.blob();
+  }
 }
 
 // Export singleton instance

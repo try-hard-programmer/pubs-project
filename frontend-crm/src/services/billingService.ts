@@ -102,3 +102,26 @@ export const getTransactions = async (params?: {
 
   return apiClient.post<Transaction[]>(url, getBillingPayload());
 };
+
+export const exportUsageReport = async (): Promise<Blob> => {
+  return apiClient.postBlob("/billing/usage/export", getBillingPayload());
+};
+
+export const downloadInvoicePdf = async (
+  transactionId: string,
+): Promise<Blob> => {
+  return apiClient.postBlob("/billing/invoice/pdf", {
+    ...getBillingPayload(),
+    transaction_id: transactionId,
+  });
+};
+
+export const downloadBillingStatementPdf = async (params?: {
+  year?: number;
+  month?: number;
+}): Promise<Blob> => {
+  return apiClient.postBlob("/billing/invoices/export-all", {
+    ...getBillingPayload(),
+    ...params,
+  });
+};

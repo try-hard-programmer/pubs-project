@@ -6,6 +6,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,9 @@ import {
   getSubscription,
   getStats,
   getTransactions,
+  exportUsageReport,
+  downloadInvoicePdf,
+  downloadBillingStatementPdf,
   SubscriptionPlan,
   BillingStats,
   Transaction,
@@ -49,6 +53,62 @@ export const UsageBilling = () => {
   const [stats, setStats] = useState<BillingStats | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  const triggerBrowserDownload = (blob: Blob, filename: string) => {
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  };
+
+  const handleExportUsage = async () => {
+    try {
+      toast.info("Preparing export...");
+      const blob = await exportUsageReport();
+      triggerBrowserDownload(
+        blob,
+        `usage_report_${new Date().toISOString().split("T")[0]}.csv`,
+      );
+      toast.success("Export downloaded successfully");
+    } catch (error) {
+      toast.error("Failed to export usage report");
+      console.error(error);
+    }
+  };
+
+  const handleDownloadAllInvoices = async () => {
+    try {
+      toast.info("Generating invoices...");
+      const blob = await downloadBillingStatementPdf();
+      triggerBrowserDownload(
+        blob,
+        `billing_statement_${new Date().getFullYear()}.pdf`,
+      );
+      toast.success("Invoices downloaded successfully");
+    } catch (error) {
+      toast.error("Failed to download invoices");
+      console.error(error);
+    }
+  };
+
+  const handleDownloadSingleInvoice = async (transactionId: string) => {
+    try {
+      toast.info("Generating PDF...");
+      const blob = await downloadInvoicePdf(transactionId);
+      triggerBrowserDownload(
+        blob,
+        `invoice_${transactionId.substring(0, 8)}.pdf`,
+      );
+      toast.success("Invoice downloaded successfully");
+    } catch (error) {
+      toast.error("Failed to download invoice");
+      console.error(error);
+    }
+  };
 
   const loadBillingData = async () => {
     try {
@@ -166,13 +226,27 @@ export const UsageBilling = () => {
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <Button variant="outline" size="lg" className="gap-2">
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    className="gap-2"
+                    onClick={() =>
+                      toast.info(
+                        "Coming soon! Please contact administration to top up credits.",
+                      )
+                    }
+                  >
                     <Download className="w-4 h-4" />
                     Export Report
                   </Button>
                   <Button
                     size="lg"
                     className="gap-2 bg-primary hover:bg-primary/90"
+                    onClick={() =>
+                      toast.info(
+                        "Coming soon! Please contact administration to top up credits.",
+                      )
+                    }
                   >
                     <Zap className="w-4 h-4" />
                     Buy Credits
@@ -347,7 +421,12 @@ export const UsageBilling = () => {
                               consumption
                             </CardDescription>
                           </div>
-                          <Button variant="outline" size="sm" className="gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={handleExportUsage}
+                          >
                             <Download className="w-4 h-4" />
                             Export
                           </Button>
@@ -524,7 +603,12 @@ export const UsageBilling = () => {
                               Your payment history and invoices
                             </CardDescription>
                           </div>
-                          <Button variant="outline" size="sm" className="gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={handleDownloadAllInvoices}
+                          >
                             <Download className="w-4 h-4" />
                             Download All
                           </Button>
@@ -581,6 +665,9 @@ export const UsageBilling = () => {
                                       variant="ghost"
                                       size="sm"
                                       className="gap-2"
+                                      onClick={() =>
+                                        handleDownloadSingleInvoice(bill.id)
+                                      }
                                     >
                                       <Download className="w-4 h-4" />
                                       Invoice

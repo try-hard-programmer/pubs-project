@@ -1595,7 +1595,7 @@ export const CustomerService = ({
           chat.id === activeChat
             ? {
                 ...chat,
-                tickets: [...(chat.tickets || []), newTicket],
+                tickets: [newTicket, ...(chat.tickets || [])],
               }
             : chat,
         ),
