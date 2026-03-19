@@ -21,6 +21,7 @@ export interface Organization {
   is_active: boolean;
   metadata?: Record<string, any>;
   is_owner?: boolean; // Included in /me response
+  member_count?: number;
 }
 
 /**
@@ -74,7 +75,7 @@ export class OrganizationService {
     orgId: string,
     data: Partial<
       Omit<Organization, "id" | "owner_id" | "created_at" | "updated_at">
-    >
+    >,
   ): Promise<Organization> {
     return apiClient.patch<Organization>(`/organizations/${orgId}`, data);
   }

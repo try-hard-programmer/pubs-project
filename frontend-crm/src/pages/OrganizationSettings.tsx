@@ -89,6 +89,9 @@ export const OrganizationSettings = () => {
   const [updatingOrg, setUpdatingOrg] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
 
+  const [invitationPage, setInvitationPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
+
   const handleSectionChange = (section: string) => {
     setActiveSection(section);
   };
@@ -154,6 +157,15 @@ export const OrganizationSettings = () => {
     cancelInvitation,
     resendInvitation,
   } = useUserManagement();
+
+  // --- TAMBAHKAN LOGIKA INI ---
+  const totalInvitations = invitations?.length || 0;
+  const totalInvitationPages = Math.ceil(totalInvitations / ITEMS_PER_PAGE);
+  const paginatedInvitations =
+    invitations?.slice(
+      (invitationPage - 1) * ITEMS_PER_PAGE,
+      invitationPage * ITEMS_PER_PAGE,
+    ) || [];
 
   // Group Management hooks
   const {
@@ -823,6 +835,7 @@ export const OrganizationSettings = () => {
                   </TabsContent>
 
                   {/* Invitations List Sub-Tab */}
+                  {/* Invitations List Sub-Tab */}
                   <TabsContent value="invitations-list" className="mt-6">
                     <Card>
                       <CardHeader>
@@ -840,93 +853,146 @@ export const OrganizationSettings = () => {
                             </p>
                           </div>
                         ) : invitations && invitations.length > 0 ? (
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>Email</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead>Sent Date</TableHead>
-                                <TableHead>Expires</TableHead>
-                                <TableHead className="text-right">
-                                  Actions
-                                </TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {invitations.map((invitation) => (
-                                <TableRow key={invitation.id}>
-                                  <TableCell className="font-medium">
-                                    {invitation.invited_email}
-                                  </TableCell>
-                                  <TableCell>
-                                    {getStatusBadge(invitation.status)}
-                                  </TableCell>
-                                  <TableCell>
-                                    {formatDate(invitation.created_at)}
-                                  </TableCell>
-                                  <TableCell>
-                                    {new Date(invitation.expires_at) >
-                                    new Date()
-                                      ? formatDate(invitation.expires_at)
-                                      : "Expired"}
-                                  </TableCell>
-                                  <TableCell className="text-right">
-                                    <div className="flex justify-end gap-2">
-                                      {invitation.status === "pending" && (
-                                        <>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleResendInvitation(
-                                                invitation.id, // Pass the ID
-                                                invitation.invited_email,
-                                              )
-                                            }
-                                            disabled={
-                                              resendingId === invitation.id
-                                            } // Lock only this button
-                                          >
-                                            {resendingId === invitation.id ? (
-                                              <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                                            ) : (
-                                              <RefreshCw className="w-4 h-4" />
-                                            )}
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => {
-                                              const link = `${window.location.origin}/accept-invitation?token=${invitation.invitation_token}`;
-                                              navigator.clipboard.writeText(
-                                                link,
-                                              );
-                                              toast.success(
-                                                "Invitation link copied to clipboard",
-                                              );
-                                            }}
-                                          >
-                                            <Copy className="w-4 h-4" />
-                                          </Button>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() =>
-                                              handleCancelInvitation(
-                                                invitation.id,
-                                              )
-                                            }
-                                          >
-                                            <XCircle className="w-4 h-4 text-destructive" />
-                                          </Button>
-                                        </>
-                                      )}
-                                    </div>
-                                  </TableCell>
+                          <>
+                            {" "}
+                            {/* <--- PEMBUNGKUS FRAGMENT DIMULAI DI SINI ---> */}
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Email</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead>Sent Date</TableHead>
+                                  <TableHead>Expires</TableHead>
+                                  <TableHead className="text-right">
+                                    Actions
+                                  </TableHead>
                                 </TableRow>
-                              ))}
-                            </TableBody>
-                          </Table>
+                              </TableHeader>
+                              <TableBody>
+                                {paginatedInvitations.map((invitation) => (
+                                  <TableRow key={invitation.id}>
+                                    <TableCell className="font-medium">
+                                      {invitation.invited_email}
+                                    </TableCell>
+                                    <TableCell>
+                                      {getStatusBadge(invitation.status)}
+                                    </TableCell>
+                                    <TableCell>
+                                      {formatDate(invitation.created_at)}
+                                    </TableCell>
+                                    <TableCell>
+                                      {new Date(invitation.expires_at) >
+                                      new Date()
+                                        ? formatDate(invitation.expires_at)
+                                        : "Expired"}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                      <div className="flex justify-end gap-2">
+                                        {invitation.status === "pending" && (
+                                          <>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleResendInvitation(
+                                                  invitation.id,
+                                                  invitation.invited_email,
+                                                )
+                                              }
+                                              disabled={
+                                                resendingId === invitation.id
+                                              }
+                                            >
+                                              {resendingId === invitation.id ? (
+                                                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                              ) : (
+                                                <RefreshCw className="w-4 h-4" />
+                                              )}
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => {
+                                                const link = `${window.location.origin}/accept-invitation?token=${invitation.invitation_token}`;
+                                                navigator.clipboard.writeText(
+                                                  link,
+                                                );
+                                                toast.success(
+                                                  "Invitation link copied to clipboard",
+                                                );
+                                              }}
+                                            >
+                                              <Copy className="w-4 h-4" />
+                                            </Button>
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() =>
+                                                handleCancelInvitation(
+                                                  invitation.id,
+                                                )
+                                              }
+                                            >
+                                              <XCircle className="w-4 h-4 text-destructive" />
+                                            </Button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                            {/* --- KONTROL PAGINASI --- */}
+                            {totalInvitationPages > 1 && (
+                              <div className="flex items-center justify-between pt-4 border-t mt-4">
+                                <div className="text-sm text-muted-foreground">
+                                  Showing{" "}
+                                  {(invitationPage - 1) * ITEMS_PER_PAGE + 1} to{" "}
+                                  {Math.min(
+                                    invitationPage * ITEMS_PER_PAGE,
+                                    totalInvitations,
+                                  )}{" "}
+                                  of {totalInvitations} entries
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setInvitationPage((prev) =>
+                                        Math.max(prev - 1, 1),
+                                      )
+                                    }
+                                    disabled={invitationPage === 1}
+                                  >
+                                    Previous
+                                  </Button>
+                                  <div className="text-sm font-medium mx-2">
+                                    Page {invitationPage} of{" "}
+                                    {totalInvitationPages}
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      setInvitationPage((prev) =>
+                                        Math.min(
+                                          prev + 1,
+                                          totalInvitationPages,
+                                        ),
+                                      )
+                                    }
+                                    disabled={
+                                      invitationPage === totalInvitationPages
+                                    }
+                                  >
+                                    Next
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </> /* <--- PEMBUNGKUS FRAGMENT DITUTUP DI SINI ---> */
                         ) : (
                           <div className="text-center py-8">
                             <Mail className="w-16 h-16 text-muted-foreground mx-auto mb-4" />

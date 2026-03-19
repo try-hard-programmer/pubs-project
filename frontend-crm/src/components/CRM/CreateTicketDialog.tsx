@@ -16,6 +16,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Check, ChevronsUpDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Ticket {
   title: string;
@@ -33,6 +48,16 @@ interface CreateTicketDialogProps {
   onCreate: (ticket: Ticket) => void;
 }
 
+const PREDEFINED_CATEGORIES = [
+  "Technical Support",
+  "Billing",
+  "General Inquiry",
+  "Product Question",
+  "Complaint",
+  "Payment",
+  "Refund",
+];
+
 export const CreateTicketDialog = ({
   open,
   onClose,
@@ -45,6 +70,10 @@ export const CreateTicketDialog = ({
     priority: "low",
     status: "open",
   });
+
+  // State untuk Combobox Category
+  const [openCombobox, setOpenCombobox] = useState(false);
+  const [searchValue, setSearchValue] = useState("");
 
   const [errors, setErrors] = useState<Partial<Record<keyof Ticket, string>>>(
     {},
@@ -92,7 +121,7 @@ export const CreateTicketDialog = ({
 
     // Category Validation
     if (!formData.category.trim()) {
-      newErrors.category = "Please select a valid category";
+      newErrors.category = "Please select or type a valid category";
     }
 
     setErrors(newErrors);
@@ -103,7 +132,10 @@ export const CreateTicketDialog = ({
     e.preventDefault();
 
     if (validateForm()) {
-      onCreate(formData);
+      onCreate({
+        ...formData,
+        category: formData.category.trim(),
+      });
       handleClose(); // Close and reset on success
     }
   };
@@ -116,6 +148,8 @@ export const CreateTicketDialog = ({
       priority: "low",
       status: "open",
     });
+    setSearchValue("");
+    setOpenCombobox(false);
     setErrors({});
     onClose();
   };
@@ -181,37 +215,100 @@ export const CreateTicketDialog = ({
             )}
           </div>
 
-          {/* Category */}
-          <div className="space-y-2">
+          {/* Category - Searchable & Creatable Select (Combobox) */}
+          <div className="space-y-2 flex flex-col">
             <Label htmlFor="category">
               Category <span className="text-red-500">*</span>
             </Label>
-            <Select
-              value={formData.category}
-              onValueChange={(value) => handleChange("category", value)}
-            >
-              <SelectTrigger
-                id="category"
-                className={
-                  errors.category ? "border-red-500 focus:ring-red-500" : ""
-                }
+            <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={openCombobox}
+                  className={cn(
+                    "w-full justify-between font-normal",
+                    !formData.category && "text-muted-foreground",
+                    errors.category &&
+                      "border-red-500 focus-visible:ring-red-500",
+                  )}
+                >
+                  {formData.category || "Select or type category..."}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="p-0"
+                style={{ width: "var(--radix-popover-trigger-width)" }}
+                align="start"
               >
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Technical Support">
-                  Technical Support
-                </SelectItem>
-                <SelectItem value="Billing">Billing</SelectItem>
-                <SelectItem value="General Inquiry">General Inquiry</SelectItem>
-                <SelectItem value="Product Question">
-                  Product Question
-                </SelectItem>
-                <SelectItem value="Complaint">Complaint</SelectItem>
-                <SelectItem value="Payment">Payment</SelectItem>
-                <SelectItem value="Refund">Refund</SelectItem>
-              </SelectContent>
-            </Select>
+                <Command>
+                  <CommandInput
+                    placeholder="Search or type custom category..."
+                    value={searchValue}
+                    onValueChange={setSearchValue}
+                  />
+                  <CommandList>
+                    <CommandEmpty>
+                      {searchValue
+                        ? `Tekan Enter untuk membuat "${searchValue}"`
+                        : "Kategori tidak ditemukan."}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {/* Standard Categories */}
+                      {PREDEFINED_CATEGORIES.map((category) => (
+                        <CommandItem
+                          key={category}
+                          value={category}
+                          onSelect={() => {
+                            handleChange("category", category);
+                            setOpenCombobox(false);
+                            setSearchValue("");
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              formData.category === category
+                                ? "opacity-100"
+                                : "opacity-0",
+                            )}
+                          />
+                          {category}
+                        </CommandItem>
+                      ))}
+
+                      {/* Custom Category Creation */}
+                      {searchValue &&
+                        !PREDEFINED_CATEGORIES.some(
+                          (c) => c.toLowerCase() === searchValue.toLowerCase(),
+                        ) && (
+                          <CommandItem
+                            value={searchValue}
+                            onSelect={() => {
+                              handleChange("category", searchValue.trim());
+                              setOpenCombobox(false);
+                              setSearchValue("");
+                            }}
+                            className="font-medium text-primary"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.category.toLowerCase() ===
+                                  searchValue.toLowerCase()
+                                  ? "opacity-100"
+                                  : "opacity-0",
+                              )}
+                            />
+                            Create "{searchValue}"
+                          </CommandItem>
+                        )}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
             {errors.category && (
               <p className="text-xs text-red-500 font-medium">
                 {errors.category}

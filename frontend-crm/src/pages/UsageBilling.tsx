@@ -20,13 +20,12 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
-  Clock,
+  XCircle,
   Zap,
   MessageSquare,
-  FileSearch,
   FileText,
-  Image as ImageIcon,
   Brain,
+  Lock,
 } from "lucide-react";
 import { Sidebar } from "@/components/FileManager/Sidebar";
 import { FloatingAIButton } from "@/components/FloatingAIButton";
@@ -77,56 +76,52 @@ export const UsageBilling = () => {
     setActiveSection(section);
   };
 
-  // Credit pricing tiers - Keys updated to match potential backend snake_case types
-  const creditPricing: Record<string, any> = {
-    basic_query: {
-      name: "Basic Query",
-      credits: 1,
+  // Map backend query_types to UI presentation
+  const queryTypeMapping: Record<string, any> = {
+    text_query: {
+      name: "AI Text Query",
       icon: MessageSquare,
       color: "text-blue-500",
       bgColor: "bg-blue-500/10",
     },
-    file_search: {
-      name: "File Search",
-      credits: 2,
-      icon: FileSearch,
-      color: "text-green-500",
-      bgColor: "bg-green-500/10",
-    },
-    document_analysis: {
-      name: "Document Analysis",
-      credits: 3,
+    upload_file: {
+      name: "File Processing",
       icon: FileText,
       color: "text-purple-500",
       bgColor: "bg-purple-500/10",
     },
-    image_analysis: {
-      name: "Image Analysis",
-      credits: 4,
-      icon: ImageIcon,
-      color: "text-orange-500",
-      bgColor: "bg-orange-500/10",
-    },
-    complex_query: {
-      name: "Complex Query",
-      credits: 5,
+    default: {
+      name: "System Action",
       icon: Brain,
-      color: "text-red-500",
-      bgColor: "bg-red-500/10",
+      color: "text-gray-500",
+      bgColor: "bg-gray-500/10",
     },
   };
 
-  // --- Derived Calculations from Live Data ---
+  // Helper untuk format IDR
+  const formatIDR = (value: number, minFraction = 2) => {
+    return new Intl.NumberFormat("id-ID", {
+      minimumFractionDigits: minFraction,
+      maximumFractionDigits: minFraction,
+    }).format(value);
+  };
 
-  // Split transactions into usage deductions and billing additions
+  // --- Derived Calculations ---
+  // A transaction is 'usage' if it has a query_type OR if it's explicitly marked as usage / negative amount
   const usageHistory = transactions.filter(
-    (tx) => tx.transaction_type === "usage" || tx.amount < 0,
-  );
-  const billingHistory = transactions.filter(
-    (tx) => tx.transaction_type !== "usage" && tx.amount > 0,
+    (tx) =>
+      tx.query_type ||
+      tx.transaction_type === "usage" ||
+      (tx.amount && tx.amount < 0),
   );
 
-  const totalUsageCredits = plan ? plan.used_credits : 0;
+  // A transaction is 'billing' (top-up) if it lacks a query type AND is a top up / positive amount
+  const billingHistory = transactions.filter(
+    (tx) =>
+      !tx.query_type &&
+      (tx.transaction_type === "top_up" || (tx.amount && tx.amount > 0)),
+  );
+
   const usagePercentage =
     plan && plan.total_credits > 0
       ? (plan.used_credits / plan.total_credits) * 100
@@ -134,7 +129,6 @@ export const UsageBilling = () => {
 
   const remainingCredits = plan ? plan.total_credits - plan.used_credits : 0;
 
-  // Calculate days until reset
   const resetDate = plan ? new Date(plan.end_date) : new Date();
   const today = new Date();
   const daysUntilReset = Math.max(
@@ -186,9 +180,9 @@ export const UsageBilling = () => {
                 </div>
               </div>
             </div>
-            {/* ADD THE CHECK HERE */}
+
             {isLoading ? (
-              <div className="h-[80vh] flex items-center justify-center">
+              <div className="h-[50vh] flex items-center justify-center">
                 <div className="flex flex-col items-center gap-4">
                   <RefreshCw className="w-8 h-8 text-primary animate-spin" />
                   <p className="text-muted-foreground">
@@ -211,8 +205,8 @@ export const UsageBilling = () => {
                             <p className="text-sm text-muted-foreground">
                               Current Plan
                             </p>
-                            <p className="text-xl font-bold text-foreground">
-                              {plan.plan_name}
+                            <p className="text-xl font-bold text-foreground capitalize">
+                              {plan.plan_name.replace("_", " ")}
                             </p>
                           </div>
                         </div>
@@ -230,7 +224,7 @@ export const UsageBilling = () => {
                               Total Credits
                             </p>
                             <p className="text-xl font-bold text-foreground">
-                              {plan.total_credits.toLocaleString()}
+                              {plan.total_credits.toLocaleString("id-ID")}
                             </p>
                           </div>
                         </div>
@@ -248,7 +242,7 @@ export const UsageBilling = () => {
                               Used Credits
                             </p>
                             <p className="text-xl font-bold text-foreground">
-                              {plan.used_credits.toLocaleString()}
+                              {plan.used_credits.toLocaleString("id-ID")}
                             </p>
                           </div>
                         </div>
@@ -266,7 +260,10 @@ export const UsageBilling = () => {
                               Total Spent
                             </p>
                             <p className="text-xl font-bold text-foreground">
-                              ${stats?.total_spent.toFixed(2) || "0.00"}
+                              IDR{" "}
+                              {stats?.total_spent
+                                ? formatIDR(stats.total_spent)
+                                : "0,00"}
                             </p>
                           </div>
                         </div>
@@ -302,8 +299,8 @@ export const UsageBilling = () => {
                             Credits Used
                           </span>
                           <span className="font-semibold text-foreground">
-                            {plan.used_credits.toLocaleString()} /{" "}
-                            {plan.total_credits.toLocaleString()}
+                            {plan.used_credits.toLocaleString("id-ID")} /{" "}
+                            {plan.total_credits.toLocaleString("id-ID")}
                           </span>
                         </div>
                         <Progress value={usagePercentage} className="h-3" />
@@ -312,7 +309,7 @@ export const UsageBilling = () => {
                             {Math.round(usagePercentage)}% used
                           </span>
                           <span className="text-green-600 font-medium">
-                            {remainingCredits.toLocaleString()} credits
+                            {remainingCredits.toLocaleString("id-ID")} credits
                             remaining
                           </span>
                         </div>
@@ -327,92 +324,6 @@ export const UsageBilling = () => {
                           </p>
                         </div>
                       )}
-
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pt-4 border-t border-border">
-                        <div>
-                          <h4 className="text-sm font-medium text-foreground mb-3">
-                            Credit Pricing Guide
-                          </h4>
-                          <div className="space-y-2">
-                            {Object.entries(creditPricing).map(
-                              ([key, pricing]) => {
-                                const Icon = pricing.icon;
-                                return (
-                                  <div
-                                    key={key}
-                                    className="flex items-center justify-between p-2 rounded-lg hover:bg-muted/50"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <div
-                                        className={`p-1.5 rounded ${pricing.bgColor}`}
-                                      >
-                                        <Icon
-                                          className={`w-3 h-3 ${pricing.color}`}
-                                        />
-                                      </div>
-                                      <span className="text-sm text-foreground">
-                                        {pricing.name}
-                                      </span>
-                                    </div>
-                                    <Badge
-                                      variant="outline"
-                                      className="text-xs"
-                                    >
-                                      {pricing.credits}{" "}
-                                      {pricing.credits === 1
-                                        ? "credit"
-                                        : "credits"}
-                                    </Badge>
-                                  </div>
-                                );
-                              },
-                            )}
-                          </div>
-                        </div>
-
-                        <div>
-                          <h4 className="text-sm font-medium text-foreground mb-3">
-                            Usage Breakdown
-                          </h4>
-                          <div className="space-y-3">
-                            {stats?.by_type &&
-                              Object.entries(stats.by_type).map(
-                                ([key, amount]) => {
-                                  const pricing =
-                                    creditPricing[key] ||
-                                    creditPricing.basic_query;
-                                  const Icon = pricing.icon;
-                                  const percentage =
-                                    stats.total_spent > 0
-                                      ? (amount / stats.total_spent) * 100
-                                      : 0;
-
-                                  return (
-                                    <div key={key} className="space-y-1">
-                                      <div className="flex items-center justify-between text-xs">
-                                        <div className="flex items-center gap-2">
-                                          <Icon
-                                            className={`w-3 h-3 ${pricing.color}`}
-                                          />
-                                          <span className="text-muted-foreground">
-                                            {pricing.name}
-                                          </span>
-                                        </div>
-                                        <span className="font-medium text-foreground">
-                                          ${amount.toFixed(2)} spent
-                                        </span>
-                                      </div>
-                                      <Progress
-                                        value={percentage}
-                                        className="h-1.5"
-                                      />
-                                    </div>
-                                  );
-                                },
-                              )}
-                          </div>
-                        </div>
-                      </div>
                     </CardContent>
                   </Card>
                 )}
@@ -432,7 +343,8 @@ export const UsageBilling = () => {
                           <div>
                             <CardTitle>Recent Usage</CardTitle>
                             <CardDescription className="mt-1">
-                              Your AI query history and credit consumption
+                              Detailed breakdown of AI query history and token
+                              consumption
                             </CardDescription>
                           </div>
                           <Button variant="outline" size="sm" className="gap-2">
@@ -449,69 +361,134 @@ export const UsageBilling = () => {
                             </p>
                           ) : (
                             usageHistory.map((usage) => {
-                              // Try to map to the correct pricing tier, fallback to basic_query
-                              const queryType =
-                                usage.metadata?.query_type || "basic_query";
-                              const pricing =
-                                creditPricing[queryType] ||
-                                creditPricing.basic_query;
-                              const Icon = pricing.icon;
+                              const qType = usage.query_type || "default";
+                              const presentation =
+                                queryTypeMapping[qType] ||
+                                queryTypeMapping.default;
+                              const Icon = presentation.icon;
+
+                              const title =
+                                usage.query_text ||
+                                usage.description ||
+                                "Unknown Action";
+                              const credits =
+                                usage.credits_used ??
+                                Math.abs(usage.amount || 0);
+                              const isFailed = usage.status === "failed";
                               const usageDate = new Date(usage.created_at);
 
                               return (
                                 <div
                                   key={usage.id}
-                                  className="flex items-start gap-4 p-4 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                                  className={`flex items-start gap-4 p-4 rounded-lg border transition-colors ${
+                                    isFailed
+                                      ? "bg-red-50/50 border-red-100 hover:bg-red-50"
+                                      : "border-border hover:bg-muted/50"
+                                  }`}
                                 >
+                                  {/* Icon */}
                                   <div
-                                    className={`p-2 rounded-lg ${pricing.bgColor} flex-shrink-0`}
+                                    className={`p-2 rounded-lg flex-shrink-0 ${
+                                      isFailed
+                                        ? "bg-red-100 text-red-600"
+                                        : presentation.bgColor
+                                    }`}
                                   >
                                     <Icon
-                                      className={`w-4 h-4 ${pricing.color}`}
+                                      className={`w-4 h-4 ${isFailed ? "text-red-600" : presentation.color}`}
                                     />
                                   </div>
 
+                                  {/* Main Content */}
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                       <Badge
-                                        variant="outline"
+                                        variant={
+                                          isFailed ? "destructive" : "outline"
+                                        }
                                         className="text-xs"
                                       >
-                                        {pricing.name}
+                                        {presentation.name}
                                       </Badge>
                                       <span className="text-xs text-muted-foreground">
-                                        {usageDate.toLocaleDateString()} at{" "}
-                                        {usageDate.toLocaleTimeString([], {
+                                        {usageDate.toLocaleDateString("id-ID")}{" "}
+                                        at{" "}
+                                        {usageDate.toLocaleTimeString("id-ID", {
                                           hour: "2-digit",
                                           minute: "2-digit",
                                         })}
                                       </span>
                                     </div>
-                                    <p className="text-sm text-foreground line-clamp-1 mb-2">
-                                      {usage.description}
+
+                                    <p className="text-sm font-medium text-foreground line-clamp-2 mb-2">
+                                      {title}
                                     </p>
-                                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                                      <div className="flex items-center gap-1 capitalize">
-                                        <Brain className="w-3 h-3" />
-                                        Provider:{" "}
-                                        {usage.metadata?.provider || "System"}
+
+                                    {/* Metadata Footer */}
+                                    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                                      {/* Status Status */}
+                                      <div
+                                        className={`flex items-center gap-1 font-medium ${isFailed ? "text-red-600" : "text-green-600"}`}
+                                      >
+                                        {isFailed ? (
+                                          <>
+                                            <XCircle className="w-3 h-3" />{" "}
+                                            Failed
+                                          </>
+                                        ) : (
+                                          <>
+                                            <CheckCircle className="w-3 h-3" />{" "}
+                                            Completed
+                                          </>
+                                        )}
                                       </div>
-                                      <div className="flex items-center gap-1">
-                                        <CheckCircle className="w-3 h-3 text-green-500" />
-                                        completed
-                                      </div>
+
+                                      {/* Cost */}
+                                      {usage.cost !== undefined &&
+                                        usage.cost > 0 && (
+                                          <div className="flex items-center gap-1 border-l pl-4">
+                                            Cost:{" "}
+                                            <span className="text-foreground">
+                                              IDR {formatIDR(usage.cost, 5)}
+                                            </span>
+                                          </div>
+                                        )}
+
+                                      {/* Tokens */}
+                                      {(usage.input_tokens > 0 ||
+                                        usage.output_tokens > 0) && (
+                                        <div className="flex items-center gap-1 border-l pl-4">
+                                          Tokens:{" "}
+                                          <span className="text-foreground">
+                                            {(
+                                              (usage.input_tokens || 0) +
+                                              (usage.output_tokens || 0)
+                                            ).toLocaleString("id-ID")}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {/* Escrow Status */}
+                                      {usage.metadata?.escrow_status && (
+                                        <div className="flex items-center gap-1 border-l pl-4 text-orange-600">
+                                          <Lock className="w-3 h-3" />
+                                          <span className="capitalize">
+                                            {usage.metadata.escrow_status}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                   </div>
 
+                                  {/* Right side: Credits Used */}
                                   <div className="text-right flex-shrink-0">
-                                    {/* Backend amounts for usage are negative, we use Math.abs to display the magnitude */}
-                                    <div className="text-lg font-bold text-foreground">
-                                      {Math.abs(usage.amount).toLocaleString()}
+                                    <div
+                                      className={`text-lg font-bold ${isFailed ? "text-red-600" : "text-foreground"}`}
+                                    >
+                                      {credits.toLocaleString("id-ID")}
                                     </div>
                                     <div className="text-xs text-muted-foreground">
-                                      {Math.abs(usage.amount) === 1
-                                        ? "credit"
-                                        : "credits"}
+                                      {credits === 1 ? "credit" : "credits"}
                                     </div>
                                   </div>
                                 </div>
@@ -574,19 +551,21 @@ export const UsageBilling = () => {
                                     </div>
                                     <div>
                                       <p className="font-medium text-foreground">
-                                        {bill.description}
+                                        {bill.description || "Credit Top-up"}
                                       </p>
                                       <p className="text-sm text-muted-foreground">
-                                        {billDate.toLocaleDateString()}
+                                        {billDate.toLocaleDateString("id-ID")}
                                       </p>
                                     </div>
                                   </div>
 
                                   <div className="flex items-center gap-6">
                                     <div className="text-right">
-                                      {/* Showing top-up magnitude */}
                                       <p className="font-semibold text-green-500">
-                                        +{bill.amount.toLocaleString()}
+                                        +
+                                        {(bill.amount || 0).toLocaleString(
+                                          "id-ID",
+                                        )}
                                       </p>
                                       <p className="text-xs text-muted-foreground">
                                         credits added

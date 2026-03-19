@@ -255,6 +255,16 @@ export const ChatWindow = ({
   const handleEscalate = async () => {
     if (!selectedAgentId) return;
 
+    // --- DOUBLE VALIDATION (OFFLINE CHECK) ---
+    // Pastikan agent masih aktif tepat sebelum request dikirim
+    const selectedAgent = agents.find((a) => a.id === selectedAgentId);
+    if (!selectedAgent || selectedAgent.status !== "active") {
+      toast.error(
+        "Gagal eskalasi: Agent yang dipilih saat ini sudah offline atau tidak aktif.",
+      );
+      return; // Batalkan proses eskalasi
+    }
+
     setIsEscalating(true);
     try {
       await onEscalateToHuman(selectedAgentId, escalationReason || undefined);

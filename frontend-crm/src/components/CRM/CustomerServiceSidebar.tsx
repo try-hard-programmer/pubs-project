@@ -544,15 +544,30 @@ export const CustomerServiceSidebar = ({
                     </div>
 
                     <div className="flex-1 min-w-0 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-sm truncate text-foreground/90">
-                          {chat.customerName}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {/* 1. Nama Customer (Bisa Terpotong/Truncate) */}
+                          <h4 className="font-semibold text-sm truncate text-foreground/90">
+                            {chat.customerName}
+                          </h4>
+
+                          {/* 2. Badge Group (Pantang Terpotong karena shrink-0) */}
                           {chat.isGroup && (
-                            <span className="ml-2 text-[10px] font-bold text-blue-500 border border-blue-200 px-1 rounded">
+                            <span className="text-[10px] font-bold text-blue-500 border border-blue-200 px-1.5 py-0.5 rounded bg-blue-50/50 shrink-0">
                               Group
                             </span>
                           )}
-                        </h4>
+
+                          {/* 3. Indikator Alert Merah (Opsional: animasi berkedip agar lebih jelas) */}
+                          {isAiHandoffError && (
+                            <span className="relative flex h-2 w-2 shrink-0">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Waktu Chat */}
                         <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
                           {chat.timestamp}
                         </span>

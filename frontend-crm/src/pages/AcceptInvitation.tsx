@@ -43,7 +43,7 @@ export const AcceptInvitation = () => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const { verifyInvitationToken, acceptInvitation } = useUserManagement();
-  const { theme } = useTheme();
+  const { resolvedTheme } = useTheme();
 
   // ✅ COPIED: Password Validation Logic from AuthPage
   const passwordRequirements = {
@@ -227,7 +227,7 @@ export const AcceptInvitation = () => {
             <div className="w-full max-w-[160px] h-14 flex items-center justify-center">
               <img
                 src={
-                  theme === "dark"
+                  resolvedTheme === "dark"
                     ? "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-dark.svg"
                     : "https://vkaixrdqtrzybovvquzv.supabase.co/storage/v1/object/public/assests/palapa-ai-light.svg"
                 }

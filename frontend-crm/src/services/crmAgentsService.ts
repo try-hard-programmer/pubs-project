@@ -743,12 +743,16 @@ export async function uploadKnowledgeDocument(
       formData,
     );
     return document;
-  } catch (error) {
+  } catch (error: any) {
+    // Tambahkan tipe : any
     console.error(
       `[CRM Agents Service] Error uploading knowledge document ${agentId}:`,
       error,
     );
-    throw new Error("Failed to upload knowledge document. Please try again.");
+    // PERBAIKAN: Gunakan error.message dari backend
+    throw new Error(
+      error.message || "Failed to upload knowledge document. Please try again.",
+    );
   }
 }
 

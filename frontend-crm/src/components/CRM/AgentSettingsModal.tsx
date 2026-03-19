@@ -514,8 +514,10 @@ export const AgentSettingsModal = ({
             uploadedAt: new Date(uploadedDoc.uploaded_at).toLocaleString(),
             status: uploadedDoc.metadata?.status || "pending",
           };
-        } catch (err) {
+        } catch (err: any) {
+          // Tambahkan tipe : any
           console.error(`Failed to upload ${file.name}:`, err);
+          toast.error(err.message || `Gagal mengunggah ${file.name}`);
           return null; // Prevent one failed file from breaking the others
         }
       });

@@ -344,11 +344,20 @@ export const NewChatModal = ({
   };
 
   // --- Validation ---
-
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    // --- 1. Integration Validation ---
+    // --- 1. Agent Assignment Validation (DOUBLE CHECK OFFLINE STATUS) ---
+    if (assignedAgentId !== "unassigned") {
+      const selectedAgent = agents.find((a) => a.id === assignedAgentId);
+      // Melindungi dari edge case jika status agent berubah di background
+      if (!selectedAgent || selectedAgent.status !== "active") {
+        newErrors.assignment =
+          "Agent yang dipilih saat ini sedang offline/tidak aktif.";
+      }
+    }
+
+    // --- 2. Integration Validation ---
     const currentAssignedAgent = agents.find((a) => a.id === assignedAgentId);
     const assignedOwnsIntegration =
       currentAssignedAgent?.integrations?.some((i) => i.channel === channel) ??
@@ -359,34 +368,43 @@ export const NewChatModal = ({
     if (assignedOwnsIntegration && !assignedHasActiveIntegration) {
       newErrors.integration = `Integrasi ${selectedChannel?.label} still DISCONNECTED.`;
     }
+
     if (!assignedOwnsIntegration && integrationAgentId === "unassigned") {
       newErrors.integration =
         "Wajib memilih Contact Integration Agent yang aktif.";
+    } else if (
+      !assignedOwnsIntegration &&
+      integrationAgentId !== "unassigned"
+    ) {
+      // Validasi ganda untuk integration agent pinjaman
+      const intAgent = agents.find((a) => a.id === integrationAgentId);
+      if (!intAgent || intAgent.status !== "active") {
+        newErrors.integration =
+          "Integration Agent yang dipilih saat ini sedang offline/tidak aktif.";
+      }
     }
 
-    // --- 2. Initial Message Validation ---
+    // --- 3. Initial Message Validation ---
     if (!initialMessage.trim()) {
       newErrors.initialMessage = "Pesan awal wajib diisi";
     }
 
-    // --- 3. Database Selection Validation ---
+    // --- 4. Database Selection Validation ---
     if (activeTab === "existing" && !selectedCustomer) {
       newErrors.selection = "Pilih customer dari database";
     }
 
-    // --- 4. Manual Input Validation ---
+    // --- 5. Manual Input Validation ---
     if (activeTab === "manual" && channel === "telegram") {
       newErrors.selection = "Manual input tidak diperbolehkan untuk Telegram";
     }
 
-    // Name Validation
     if (activeTab === "manual" && !manualName.trim()) {
       newErrors.customerName = "Nama wajib diisi";
     } else if (activeTab === "manual" && !isValidName(manualName)) {
       newErrors.customerName = "Nama mengandung karakter tidak valid";
     }
 
-    // Contact Validation
     if (activeTab === "manual" && !manualContact.trim()) {
       newErrors.contact = "Kontak wajib diisi";
     } else if (activeTab === "manual" && hasEmoji(manualContact)) {

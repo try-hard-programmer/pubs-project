@@ -27,17 +27,32 @@ export interface BillingStats {
 export interface Transaction {
   id: string;
   organization_id: string;
-  amount: number;
-  description: string;
-  transaction_type: "usage" | "top_up" | "refund";
-  metadata: {
-    input_tokens?: number;
-    output_tokens?: number;
+  created_at: string;
+
+  // --- New Payload Fields ---
+  query_type?: "text_query" | "upload_file" | string;
+  query_text?: string;
+  credits_used?: number;
+  status?: "completed" | "failed" | "pending" | string;
+  input_tokens?: number;
+  output_tokens?: number;
+  cost?: number;
+
+  // --- Legacy / Billing Top-up Fields (Optional fallbacks) ---
+  amount?: number;
+  description?: string;
+  transaction_type?: "usage" | "top_up" | "refund";
+  balance_after?: number | null;
+
+  metadata?: {
+    agent_id?: string;
     provider?: string;
+    chat_id?: string;
+    message_id?: string;
+    escrow_status?: "reserved" | "committed" | "refunded" | string;
+    provider_cogs_usd?: number;
     [key: string]: any;
   };
-  balance_after: number | null;
-  created_at: string;
 }
 
 // ============= API Functions =============

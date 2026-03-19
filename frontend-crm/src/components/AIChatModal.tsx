@@ -344,6 +344,12 @@ export const AIChatModal = ({
     undefined,
   );
 
+  // for preview image
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
+  const handleImageClick = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+  };
+
   const { toast } = useToast();
   const { files, error } = useFiles("all", null, "name", "asc");
 
@@ -1054,7 +1060,8 @@ export const AIChatModal = ({
                                     key={idx}
                                     src={img}
                                     alt={`Upload ${idx + 1}`}
-                                    className="rounded-lg max-h-32 w-full object-cover border border-border/50"
+                                    className="rounded-lg max-h-32 w-full object-cover border border-border/50 cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => handleImageClick(img)}
                                   />
                                 ))}
                               </div>
@@ -1222,12 +1229,15 @@ export const AIChatModal = ({
                       <img
                         src={img}
                         alt={`Preview ${idx + 1}`}
-                        className="h-14 w-14 sm:h-16 sm:w-16 object-cover rounded-lg border border-border"
+                        // Tambahkan class cursor-pointer dan hover effect
+                        className="h-14 w-14 sm:h-16 sm:w-16 object-cover rounded-lg border border-border cursor-pointer hover:opacity-80 transition-opacity"
+                        // Panggil fungsi handleImageClick yang sama
+                        onClick={() => handleImageClick(img)}
                       />
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute -top-1.5 -right-1.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                        className="absolute -top-1.5 -right-1.5 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm z-10"
                         onClick={() => removeImage(idx)}
                       >
                         <X className="h-3 w-3" />
@@ -1295,6 +1305,32 @@ export const AIChatModal = ({
         loading={deleting}
         topicTitle={deletingTitle}
       />
+
+      {/* Image Preview Modal */}
+      <Dialog
+        open={!!previewImageUrl}
+        onOpenChange={(open) => !open && setPreviewImageUrl(null)}
+      >
+        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95 border-none">
+          <div className="relative flex items-center justify-center min-h-[50vh] max-h-[90vh]">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 text-white hover:bg-white/20 z-50 bg-black/40 rounded-full"
+              onClick={() => setPreviewImageUrl(null)}
+            >
+              <X className="h-5 w-5" />
+            </Button>
+            {previewImageUrl && (
+              <img
+                src={previewImageUrl}
+                alt="Preview"
+                className="w-auto h-auto max-w-full max-h-[90vh] object-contain"
+              />
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <FilePreview
         file={previewFile}
