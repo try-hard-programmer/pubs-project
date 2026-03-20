@@ -63,6 +63,7 @@ export const FileManager = () => {
   const organizationId = userRoles?.[0]?.organization_id;
   const completedToasted = useRef<Set<string>>(new Set());
   const failedToasted = useRef<Set<string>>(new Set());
+  const warningToasted = useRef<Set<string>>(new Set());
 
   const { subscribeToMessages } = useWebSocket();
 
@@ -84,7 +85,7 @@ export const FileManager = () => {
       }
 
       if (notification.type === "file_upload_failed") {
-        const docId = notification.docId;
+        const docId = notification.docId || notification.doc_id; // Added fallback just in case
         const fileName = notification.filename;
         const errorMessage = notification.error || "Unknown error";
 
@@ -93,12 +94,27 @@ export const FileManager = () => {
           toast.error(`Gagal memproses: ${fileName}\n${errorMessage}`);
         }
       }
+
+      if (notification.type === "file_upload_warning") {
+        const docId = notification.doc_id;
+        const fileName = notification.filename;
+        const msg =
+          notification.message ||
+          "File is stored in drive but cannot be embedded";
+
+        if (!warningToasted.current.has(docId)) {
+          warningToasted.current.add(docId);
+          toast.warning(
+            `"${fileName}" was saved but cannot be searched/embedded. ${msg}`,
+          );
+        }
+      }
     });
 
     return () => {
-      // Opsional: bersihkan set saat unmount
       completedToasted.current.clear();
       failedToasted.current.clear();
+      warningToasted.current.clear();
       unsubscribe();
     };
   }, [organizationId, subscribeToMessages]);

@@ -20,6 +20,9 @@ import {
   Loader2,
   Settings,
   ShareIcon,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -47,6 +50,37 @@ import { ConfirmDeleteDialog } from "../ConfirmDeleteDialog";
 import { deleteDocument } from "@/lib/documentsApi";
 import { FileFilterDropdown } from "../FileFilterControl";
 import { parse } from "path";
+
+const EmbeddingStatusBadge = ({ status }: { status?: string | null }) => {
+  if (status === "completed") {
+    return (
+      <div className="flex items-center text-green-500" title="Embedded">
+        <CheckCircle2 className="w-4 h-4" />
+      </div>
+    );
+  }
+  if (status === "failed") {
+    return (
+      <div
+        className="flex items-center text-destructive"
+        title="Processing failed"
+      >
+        <XCircle className="w-4 h-4" />
+      </div>
+    );
+  }
+  if (status === "not_supported") {
+    return (
+      <div
+        className="flex items-center text-yellow-500"
+        title="Stored, not searchable"
+      >
+        <AlertTriangle className="w-4 h-4" />
+      </div>
+    );
+  }
+  return null;
+};
 
 interface FileGridProps {
   viewMode: "grid" | "list";
@@ -1282,6 +1316,12 @@ export const FileGrid = ({
                               : formatFileSize(file.size)}
                           </span>
                           <span>{formatDate(file.created_at)}</span>
+                          {!file.is_folder && (
+                            <EmbeddingStatusBadge
+                              status={file.embedding_status}
+                            />
+                          )}
+
                           {file.is_shared && (
                             <Badge variant="secondary" className="text-xs">
                               <Users className="w-3 h-3 mr-1" />
@@ -1938,6 +1978,9 @@ export const FileGrid = ({
                     <span className="font-medium truncate">
                       {file.is_folder ? "Folder" : formatFileSize(file.size)}
                     </span>
+                    {!file.is_folder && (
+                      <EmbeddingStatusBadge status={file.embedding_status} />
+                    )}
                   </div>
                   {file.is_shared && file.shared[0].share_type !== "public" && (
                     <div className="text-xs text-muted-foreground mt-1">

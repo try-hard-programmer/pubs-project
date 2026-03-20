@@ -22,6 +22,7 @@ export interface FileItem {
   access_level?: "view" | "edit" | "delete" | "share" | "manage";
   metadata?: Record<string, any>;
   shared?: fileManagerApi.ShareResponse[];
+  embedding_status?: "completed" | "failed" | "not_supported" | null;
 }
 
 export const useFiles = (
@@ -150,6 +151,7 @@ export const useFiles = (
           url: item.url || null,
           is_shared: !!(Array.isArray(item.shared) && item.shared.length > 0),
           shared: item.shared ?? [],
+          embedding_status: item.embedding_status || null,
         }));
 
         console.log("API browse results:", {

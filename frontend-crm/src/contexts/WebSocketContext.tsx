@@ -31,9 +31,19 @@ export interface WebSocketMessage {
     | "document_upload_completed"
     | "document_upload_failed"
     | "file_upload_completed"
-    | "file_upload_failed";
+    | "file_upload_failed"
+    | "file_upload_warning";
   timestamp?: string;
   data?: any;
+}
+
+// 2. Add the specific interface for the warning
+export interface WebSocketFileUploadWarning extends WebSocketMessage {
+  type: "file_upload_warning";
+  doc_id: string;
+  filename: string;
+  status: "not_supported";
+  message: string;
 }
 
 /**
@@ -139,7 +149,8 @@ export type WebSocketNotification =
   | WebSocketNewMessage
   | WebSocketChatUpdate
   | WebSocketDocumentUploadCompleted
-  | WebSocketDocumentUploadFailed;
+  | WebSocketDocumentUploadFailed
+  | WebSocketFileUploadWarning;
 
 /**
  * Callback function type for message subscribers
@@ -422,9 +433,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
             messageId = `${notification.type}_${notification.data.chat_id}_${notification.timestamp}`;
           } else if (
             notification.type === "document_upload_completed" ||
-            notification.type === "document_upload_failed"
+            notification.type === "document_upload_failed" ||
+            notification.type === "file_upload_completed" ||
+            notification.type === "file_upload_failed" ||
+            notification.type === "file_upload_warning"
           ) {
-            // ✅ FIX: Read doc_id directly from the notification object
             messageId = `${notification.type}_${(notification as any).doc_id}`;
           }
 

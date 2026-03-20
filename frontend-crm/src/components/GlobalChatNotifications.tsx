@@ -262,6 +262,9 @@ export const GlobalChatNotifications = () => {
       // ✅ ADD THESE TWO CASES:
       case "document_upload_completed":
       case "document_upload_failed":
+      case "file_upload_completed":
+      case "file_upload_failed":
+      case "file_upload_warning":
         // Do nothing globally. AgentSettingsModal handles these directly.
         break;
 
